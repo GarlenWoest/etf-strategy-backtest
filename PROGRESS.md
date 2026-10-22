@@ -1,9 +1,17 @@
 # PROGRESS
 
-_Last updated: 2026-10-22 (project closed)_
+_Last updated: 2026-10-22 (Phase 9 research complete; waiting for your pick)_
 
 ## Current phase
-**Complete. Final report written: `reports/FINAL_REPORT.md`; README updated as the project front page.**
+**Phase 9 (commodities research), steps a–d complete. Stopped for your choice of ideas.** Nothing pre-registered, nothing backtested, no instrument switched.
+
+- 9a/9b: 153 sources found, 114 kept (95 strategy evidence + 19 instrument/tax facts), 39 rejected. See `research/sources_commodities.csv`.
+- 9c: daily data for GLD, IAU, GLDM, SLV, USO, CPER, UGL, AGQ, UCO, DGP and SPY, plus front-month futures, GVZ/OVX and FRED macro series, all through 2023-12-29. 0 holdout rows. Report: `reports/data_quality_commodities.md`. Your decision needed: CPER is unusable before 2017.
+- 9d: `research/IDEA_POOL_COMMODITIES.md` has 14 ranked ideas, 6 ideas flagged as needing non-free data, and the $100 instrument feasibility table.
+- Next, after you pick: pre-register with cumulative N = 92 + new trials, run Phases 4–6 unchanged, then Phase 10 signal-only alerts.
+
+### Earlier ETF study (closed)
+Final report: `reports/FINAL_REPORT.md`.
 
 The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It has never been opened or downloaded. The broker check and paper script were skipped at your request.
 
