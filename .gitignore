@@ -1,0 +1,12 @@
+# Audited third-party clone: kept local and read-only, not tracked (commit hash recorded in AUDIT.md)
+vendor/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+tmp/
+data/raw/*
+!data/raw/.gitkeep
+data/clean/*
+!data/clean/.gitkeep
+results/

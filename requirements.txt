@@ -1,0 +1,9 @@
+# Approved packages only (Phase 2 list), pinned to exact versions.
+# Installed 2026-10-22 on Python 3.14.8. Full transitive pin list: requirements-lock.txt
+pandas==3.1.0
+numpy==2.5.4
+scipy==1.18.1
+matplotlib==3.11.2
+yfinance==1.7.0
+PyYAML==6.0.3
+pytest==9.1.1
