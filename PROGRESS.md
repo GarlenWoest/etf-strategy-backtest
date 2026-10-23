@@ -1,8 +1,15 @@
 # PROGRESS
 
-_Last updated: 2026-10-23 (project closed)_
+_Last updated: 2026-10-23 (expansion plan written; waiting for approval)_
 
 ## Current phase
+**Expansion planning (2026-10-23): Phase 0 audit, gap analysis and plan written to `research/EXPANSION_PLAN.md`. Nothing implemented; waiting for your approval.**
+- Scope: gold, USD/JPY and GBP/USD specialists as a modular extension; existing studies, holdout, tasks and paper books untouched.
+- Baseline verified: 90 tests pass; research log 1,045 rows with 134 unique pre-registered trials; next trial ID V135 (cumulative N continues from 134).
+- Recommendation: activate USD/JPY first; gold and GBP/USD in monitoring mode.
+- Open decisions are listed in section 13 of the plan: first specialist, ledger sizes ($100 GLD; $10k FX at ≤1x notional), FX study splits, login-gated data sources, dependencies, publication, housekeeping.
+
+### Project status before the expansion
 **Project closed (2026-10-23).** Three pre-registered studies, 134 cumulative trials, 0 validated. `reports/FINAL_REPORT.md` (via `tools/make_final_report.py`) and `README.md` cover all three studies and the GitHub survey. The holdout (2024 onward) was never opened. Not pushed: the user will push.
 
 ### After closing: monitoring tools (outside the research; exempt from rule 2 for their own folders only)
