@@ -5,6 +5,12 @@ _Last updated: 2026-10-23 (project closed)_
 ## Current phase
 **Project closed (2026-10-23).** Three pre-registered studies, 134 cumulative trials, 0 validated. `reports/FINAL_REPORT.md` (via `tools/make_final_report.py`) and `README.md` cover all three studies and the GitHub survey. The holdout (2024 onward) was never opened. Not pushed: the user will push.
 
+### After closing: monitoring tools (outside the research; exempt from rule 2 for their own folders only)
+- **Weekly market brief:** Sundays 6 PM ET → `briefs/` (git-ignored). Informational only.
+- **Watchlist alerts:** weekdays 4:45 PM ET → `live/` (git-ignored). V122 (VTI/IEF/DBC/GLD stand-ins) and V074, both labelled NOT VALIDATED, FAILED TESTING; signals only.
+- **Paper trading test (PAPER, FICTIONAL MONEY):** `paper/` (git-ignored). Four $100 books from 2026-10-26: A rules (V122 + V074), B discretionary (one journalled decision per week, fingerprinted, 5-day hold), SPY and 70/30 SPY/GLD benchmarks. 2-week checkpoint report, and no conclusion before 3 months.
+- None of these place orders or connect a broker, and nothing from them enters `data/`, `research_log.csv` or any study.
+
 ### Study 3 (long-history validation, 1927–2018)
 - Data: Ken French (stocks, T-bills), AQR (commodities; TSMOM factor as reference), FRED (LTGOVTBD, GS10, TB3MS, CPI), Shiller (cross-checks only), World Bank Pink Sheet (gold, user decision: FRED deleted its gold series in 2022). xlrd 2.0.1 and openpyxl 3.1.5 installed with approval. Every file was truncated before 2024 on parsing and the originals deleted. Report: `reports/data_quality_longhist.md`.
 - Pre-registered in commit 79d90a4: V119–V122 (P2 multi-asset trend, 6/8/10/12 months) and V123–V134 (S3 monthly TSMOM, 3/6/12 months × stocks/bonds/gold/commodities). Cumulative N = 134.
@@ -62,4 +68,4 @@ The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It ha
 
 ## Notes
 - `data/` and `results/` are not committed. Hashes are in `data/raw/download_meta.json` and `data/clean/build_meta.json`.
-- 68 tests pass (`pytest tests`). `research_log.csv` rows: see `wc -l`; commodity rows are phases 9-freeze, 9-4-in-sample, 9-5-*, 9-6-kill.
+- 76 tests pass (`pytest tests`). `research_log.csv` rows: see `wc -l`; commodity rows are phases 9-freeze, 9-4-in-sample, 9-5-*, 9-6-kill.

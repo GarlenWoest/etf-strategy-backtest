@@ -16,3 +16,6 @@ briefs/
 
 # watchlist alerts (exempt from rule 2 for live/ only; never committed)
 live/
+
+# paper trading test (PAPER, FICTIONAL MONEY; exempt from rule 2 for paper/ only; never committed)
+paper/
