@@ -77,3 +77,14 @@ def test_commodity_study_frozen_list():
         rows = [r for r in csv.DictReader(fh) if r["phase"] == "9-freeze"]
     assert [r["test_id"] for r in rows if r["result"] == "PRE-REGISTERED"] == ["V%03d" % i for i in range(93, 119)]
     assert sum(r["result"] == "BENCHMARK" for r in rows) == 9
+
+
+def test_study3_frozen_list():
+    c = cfg["study3_longhist"]
+    assert c["frozen"] is True and c["cumulative_trials_for_dsr"] == 134
+    n = len(c["trials"]["P2_multi_asset_trend"]["sma_months"]) + \
+        len(c["trials"]["S3_tsmom_monthly"]["lookback_months"]) * len(c["trials"]["S3_tsmom_monthly"]["assets"])
+    assert n == 16
+    with open(PROJECT_ROOT / "research_log.csv", newline="") as fh:
+        rows = [r for r in csv.DictReader(fh) if r["phase"] == "study3-freeze"]
+    assert [r["test_id"] for r in rows if r["result"] == "PRE-REGISTERED"] == ["V%03d" % i for i in range(119, 135)]

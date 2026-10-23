@@ -1000,3 +1000,25 @@ V115,2026-10-23T00:07:03Z,9-6-kill,I06_dollar_trend,DTWEXBGS,GLD,sma=100;h10_lag
 V116,2026-10-23T00:07:03Z,9-6-kill,I06_dollar_trend,DTWEXBGS,UGL,sma=100;h10_lag,2019-01-01..2023-12-31,1,0.016467,0.203574,0.0905,-0.372987,14,KILLED,K1 OOS Sharpe 0.09 does not beat own buy-and-hold 0.56 and equal weight 0.42; K2 DSR 0.084 < 0.95; K4 14 OOS round trips < 30; K5 neighbor(s) V118(sma=200) fail out of sample; K6 OOS Sharpe 0.09 < half of in-sample 0.48,mechanical; ETF-study definitions; N=118
 V117,2026-10-23T00:07:03Z,9-6-kill,I06_dollar_trend,DTWEXBGS,GLD,sma=200;h10_lag,2019-01-01..2023-12-31,1,0.015801,0.093658,0.0138,-0.187735,7,KILLED,K1 OOS Sharpe 0.01 does not beat own buy-and-hold 0.56 and equal weight 0.42; K2 DSR 0.060 < 0.95; K4 7 OOS round trips < 30; K5 neighbor(s) V115(sma=100) fail out of sample; K6 OOS Sharpe 0.01 < half of in-sample 0.48,mechanical; ETF-study definitions; N=118
 V118,2026-10-23T00:07:03Z,9-6-kill,I06_dollar_trend,DTWEXBGS,UGL,sma=200;h10_lag,2019-01-01..2023-12-31,1,-0.008078,0.189290,-0.0468,-0.372987,7,KILLED,K1 OOS Sharpe -0.05 does not beat own buy-and-hold 0.56 and equal weight 0.42; K2 DSR 0.045 < 0.95; K4 7 OOS round trips < 30; K5 neighbor(s) V116(sma=100) fail out of sample; K6 OOS Sharpe -0.05 < half of in-sample 0.45,mechanical; ETF-study definitions; N=118
+L01,2026-10-23T00:41:09Z,study3-freeze,buy_and_hold,stocks,stocks,,,,,,,,,BENCHMARK,,Study 3; not a trial
+L02,2026-10-23T00:41:09Z,study3-freeze,buy_and_hold,bonds,bonds,,,,,,,,,BENCHMARK,,Study 3; not a trial
+L03,2026-10-23T00:41:09Z,study3-freeze,buy_and_hold,commodities,commodities,,,,,,,,,BENCHMARK,,Study 3; not a trial
+L04,2026-10-23T00:41:09Z,study3-freeze,buy_and_hold,gold,gold,,,,,,,,,BENCHMARK,,Study 3; not a trial
+L05,2026-10-23T00:41:09Z,study3-freeze,equal_weight_available,stocks|bonds|commodities|gold,stocks|bonds|commodities|gold,monthly,,,,,,,,BENCHMARK,,Study 3; not a trial
+L06,2026-10-23T00:41:09Z,study3-freeze,sixty_forty,stocks|bonds,stocks|bonds,monthly,,,,,,,,BENCHMARK,,Study 3; not a trial
+V119,2026-10-23T00:41:09Z,study3-freeze,P2_multi_asset_trend_longhist,stocks|bonds|commodities|gold,same,sma_months=6;1/k_each;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 119 of 134
+V120,2026-10-23T00:41:09Z,study3-freeze,P2_multi_asset_trend_longhist,stocks|bonds|commodities|gold,same,sma_months=8;1/k_each;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 120 of 134
+V121,2026-10-23T00:41:09Z,study3-freeze,P2_multi_asset_trend_longhist,stocks|bonds|commodities|gold,same,sma_months=10;1/k_each;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 121 of 134
+V122,2026-10-23T00:41:09Z,study3-freeze,P2_multi_asset_trend_longhist,stocks|bonds|commodities|gold,same,sma_months=12;1/k_each;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 122 of 134
+V123,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,stocks,stocks,lookback_months=3;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 123 of 134
+V124,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,bonds,bonds,lookback_months=3;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 124 of 134
+V125,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,gold,gold,lookback_months=3;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 125 of 134
+V126,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,commodities,commodities,lookback_months=3;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 126 of 134
+V127,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,stocks,stocks,lookback_months=6;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 127 of 134
+V128,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,bonds,bonds,lookback_months=6;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 128 of 134
+V129,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,gold,gold,lookback_months=6;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 129 of 134
+V130,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,commodities,commodities,lookback_months=6;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 130 of 134
+V131,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,stocks,stocks,lookback_months=12;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 131 of 134
+V132,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,bonds,bonds,lookback_months=12;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 132 of 134
+V133,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,gold,gold,lookback_months=12;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 133 of 134
+V134,2026-10-23T00:41:09Z,study3-freeze,S3_tsmom_monthly_longhist,commodities,commodities,lookback_months=12;monthly,,,,,,,,PRE-REGISTERED,,cumulative trial 134 of 134

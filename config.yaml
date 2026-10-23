@@ -151,3 +151,25 @@ commodity_study:                    # Phase 9+ (user decisions 2026-10-22). FROZ
     I05_real_yield:       {fast_obs: 20, slow_obs: [120, 250], trade: [GLD, UGL], rule: "hold when 20-obs mean DFII10 < slow-obs mean, else cash"}   # 4: V111-V114
     I06_dollar_trend:     {sma_obs: [100, 200], trade: [GLD, UGL], rule: "hold when DTWEXBGS < its SMA, else cash"}   # 4: V115-V118
   monthly_for_k4: [I01_tsmom_basket, I04_dual_momentum]
+
+study3_longhist:                    # Study 3 (user request 2026-10-23). FROZEN at pre-registration; V119-V134. No new ideas.
+  frozen: true
+  data: "monthly; stocks Ken French market TR; bonds from FRED LTGOVTBD (20y, to 1953-04) and GS10 (10y, from 1953-05); commodities AQR Commodities for the Long Run EW excess + RF; gold World Bank monthly average from 1971-10; cash Ken French RF"
+  evaluation: {first_return: "1927-08-31", last_return: "2018-12-31"}
+  eras: {E1_pre1950: ["1927-08-31", "1949-12-31"], E2_1950_1979: ["1950-01-31", "1979-12-31"], E3_1980_1999: ["1980-01-31", "1999-12-31"], E4_2000_2018: ["2000-01-31", "2018-12-31"]}
+  execution: "weights decided at month-end close t from data up to t earn month t+1; rebalance every month-end to target; costs on turnover"
+  costs_one_way:                    # Hurst, Ooi & Pedersen (2017) Appendix B (AQR 2012 estimates x6 for 1880-1992, x2 for 1993-2002, from Jones 2002); 2003+ floored at this project's ETF cost (0.07%)
+    stocks:      {to_1992: 0.0034, "1993_2002": 0.0011, from_2003: 0.0007}
+    bonds:       {to_1992: 0.0006, "1993_2002": 0.0002, from_2003: 0.0007}
+    commodities: {to_1992: 0.0058, "1993_2002": 0.0019, from_2003: 0.0010}
+    gold:        {to_1992: 0.0058, "1993_2002": 0.0019, from_2003: 0.0010}
+  trials:
+    P2_multi_asset_trend: {sma_months: [6, 8, 10, 12], assets: [stocks, bonds, commodities, gold], weight: "1/k of assets available at t (k=3 before 1971-10)", ids: V119-V122}
+    S3_tsmom_monthly:     {lookback_months: [3, 6, 12], assets: [stocks, bonds, gold, commodities], rule: "100% in asset when trailing L-month total return > 0, else T-bills; evaluated monthly (Study 1 evaluated daily: monthly data only)", ids: V123-V134}
+  leverage: none                    # no leveraged products existed for most of the sample; the question is whether the rule has an edge
+  benchmarks: [L01 B&H stocks, L02 B&H bonds, L03 B&H commodities, L04 B&H gold, L05 equal weight available assets monthly, L06 60/40 stocks/bonds monthly]   # costs charged on rebalancing too
+  pass_rule: "an era is passed if the trial's Sharpe (excess over RF, 1x costs) beats its own buy-and-hold (S3: the asset; P2: L05) AND 60/40 (L06) in that era; an era with <10 years of the trial's asset data counts as not passed (so S3 on gold, available from 1971-10, cannot pass); the idea passes only with >= 3 of 4 eras"
+  dsr: "N = 134 cumulative (92 + 26 + 16); monthly excess returns over each trial's full evaluation span; cross-trial variance of Sharpe over the 16 Study 3 trials (same sample; Studies 1-2 Sharpes come from 5-year daily windows and are not comparable); K2 threshold 0.95 still required for anything to go further"
+  robustness_not_trials: ["costs x2 and x3", "signals lagged one extra month (averaged gold/bond data)"]
+  cumulative_trials_for_dsr: 134
+  worst_stretch: "worst annualized total return over any 120-month window, full evaluation span"
