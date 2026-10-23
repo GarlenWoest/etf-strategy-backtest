@@ -10,3 +10,6 @@ data/raw/*
 data/clean/*
 !data/clean/.gitkeep
 results/
+
+# weekly market brief (exempt from rule 2 for briefs/ only; never committed)
+briefs/
