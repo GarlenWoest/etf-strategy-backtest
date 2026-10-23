@@ -13,3 +13,6 @@ results/
 
 # weekly market brief (exempt from rule 2 for briefs/ only; never committed)
 briefs/
+
+# watchlist alerts (exempt from rule 2 for live/ only; never committed)
+live/
