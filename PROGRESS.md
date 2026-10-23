@@ -1,10 +1,11 @@
 # PROGRESS
 
-_Last updated: 2026-10-23 (Study 3 complete)_
+_Last updated: 2026-10-23 (project closed)_
 
 ## Current phase
-**Study 3 (long-history validation, 1927–2018) complete; stopped after the report, as instructed.** Holdout still locked. Not pushed.
+**Project closed (2026-10-23).** Three pre-registered studies, 134 cumulative trials, 0 validated. `reports/FINAL_REPORT.md` (via `tools/make_final_report.py`) and `README.md` cover all three studies and the GitHub survey. The holdout (2024 onward) was never opened. Not pushed: the user will push.
 
+### Study 3 (long-history validation, 1927–2018)
 - Data: Ken French (stocks, T-bills), AQR (commodities; TSMOM factor as reference), FRED (LTGOVTBD, GS10, TB3MS, CPI), Shiller (cross-checks only), World Bank Pink Sheet (gold, user decision: FRED deleted its gold series in 2022). xlrd 2.0.1 and openpyxl 3.1.5 installed with approval. Every file was truncated before 2024 on parsing and the originals deleted. Report: `reports/data_quality_longhist.md`.
 - Pre-registered in commit 79d90a4: V119–V122 (P2 multi-asset trend, 6/8/10/12 months) and V123–V134 (S3 monthly TSMOM, 3/6/12 months × stocks/bonds/gold/commodities). Cumulative N = 134.
 - Result: V119 and V122 pass the pre-registered era rule (3 of 4 eras) and DSR at 1x costs, but fail every pre-registered robustness check (2x/3x costs, one-month signal lag), their neighbours pass only 2 eras, and their full-span edge over equal weight is about zero. Report: `reports/study3_longhist.md`.
@@ -51,6 +52,7 @@ The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It ha
 8. **Commodity Phase 5 report:** the parameter column first showed "fast=20" for I05 instead of the slow window; fixed with a report-only rebuild (no rerun, no duplicate log rows).
 9. **Study 3 data check:** the first bond cross-check against Shiller showed correlation 0.31. Cause: Shiller dates each monthly bond return by its start month. Aligned, the series match at 1.000; documented in the validation script.
 10. **Study 3 report:** the first version said "1 of 16" trials pass the DSR; the correct count is 4 (V119–V122). Fixed with a report-only rebuild (no duplicate log rows).
+11. **Rule 7 slip during the close-out:** a shell command briefly wrote an empty scratch file to /tmp (outside the project). It was deleted immediately; nothing else was written outside trading-research/.
 6. Several unit-test expectations I wrote were wrong (hand arithmetic, fill timing). In each case the code was verified against a hand calculation before the test was corrected.
 
 ## If the project is ever resumed
@@ -60,4 +62,4 @@ The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It ha
 
 ## Notes
 - `data/` and `results/` are not committed. Hashes are in `data/raw/download_meta.json` and `data/clean/build_meta.json`.
-- 63 tests pass (`pytest tests`). `research_log.csv` rows: see `wc -l`; commodity rows are phases 9-freeze, 9-4-in-sample, 9-5-*, 9-6-kill.
+- 68 tests pass (`pytest tests`). `research_log.csv` rows: see `wc -l`; commodity rows are phases 9-freeze, 9-4-in-sample, 9-5-*, 9-6-kill.

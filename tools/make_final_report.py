@@ -131,6 +131,14 @@ all_val = pd.concat([m5.loc[m5.index.str.startswith("V"), "val_sharpe"], cv["val
 n_above_mix = int((all_val > mix["val_sharpe"]).sum())
 best_any = all_val.idxmax()
 yr = lambda t: ceq[t].resample("YE").last().pct_change().loc["2019":"2023"]
+# ---------------------------------------------------------------- Study 3 (long history) numbers
+s3 = pd.read_csv(RES / "study3_metrics.csv", index_col=0)
+s3v = s3[s3.index.str.startswith("V")]
+S3E = ["E1_pre1950", "E2_1950_1979", "E3_1980_1999", "E4_2000_2018"]
+S3L = {"E1_pre1950": "1927–49", "E2_1950_1979": "1950–79", "E3_1980_1999": "1980–99", "E4_2000_2018": "2000–18"}
+s3_era_ok = [t for t in s3v.index if str(s3v.at[t, "passes_era_rule"]) == "True"]
+s3_full = {t: s3.loc[t] for t in s3.index}
+N_ALL = 92 + len(cv) + len(s3v)
 
 
 def pc(x):
@@ -143,16 +151,22 @@ def yrs(x):
 
 L = []
 w_ = L.append
-w_("# Can a $100 account reach $1,000 with simple ETF or commodity strategies? Two pre-registered backtest studies\n")
+w_("# Can a $100 account reach $1,000 with simple ETF or commodity strategies? Three pre-registered backtest studies\n")
 w_("_Final report. Data 2004-11-18 to 2023-12-29. The 2024 onward holdout was never opened. Last updated %s._\n" %
    pd.Timestamp.now().strftime("%Y-%m-%d"))
-w_("## Headline (both studies)\n")
-w_("**0 of %d pre-registered strategies survived** (Study 1: 0 of 92 on ETFs; Study 2: 0 of 26 on commodities; "
-   "the Deflated Sharpe test used the cumulative N = %d). Some killed trials and QQQ buy-and-hold had higher 2019–2023 "
-   "Sharpe ratios than the 70/30 SPY/GLD mix (%d trials above it; the best, %s, %.2f), but none by enough to rule out "
-   "luck. The 70/30 SPY/GLD mix (Sharpe %.2f, worst drop %.0f%%) beat every commodity trial and is a sensible no-skill "
-   "baseline.\n" % (92 + len(cv), 92 + len(cv), n_above_mix, best_any, all_val.max(), mix["val_sharpe"],
-                     100 * mix["val_max_drawdown"]))
+w_("## Headline (all three studies)\n")
+w_("**0 of %d pre-registered strategies were validated** (Study 1: 92 on ETFs; Study 2: 26 on commodities; Study 3: %d "
+   "long-history re-tests; the Deflated Sharpe test used the cumulative N). Over 1927–2018, multi-asset trend rules "
+   "reduced drawdowns sharply (worst fall about %.0f%% vs %.0f%% for equal weight and %.0f%% for 60/40) but did not add "
+   "meaningful return over equal weight or 60/40 (%.1f%% a year vs %.1f%% and %.1f%%; the difference from equal weight is "
+   "not statistically significant), and the advantage weakened under higher costs "
+   "or a one-month signal lag. Two of them (%s) passed Study 3's primary era rule at 1x costs but failed every "
+   "pre-registered robustness check. In 2019–2023, some killed trials and QQQ had higher Sharpe ratios than a 70/30 "
+   "SPY/GLD mix (Sharpe %.2f, worst drop %.0f%%), but none by enough to rule out luck; the 70/30 mix beat every "
+   "commodity trial and is a sensible no-skill baseline.\n" % (
+       N_ALL, len(s3v), 100 * s3.loc["V122", "full_max_dd"], 100 * s3.loc["L05", "full_max_dd"], 100 * s3.loc["L06", "full_max_dd"],
+       100 * s3.loc["V122", "full_cagr"], 100 * s3.loc["L05", "full_cagr"], 100 * s3.loc["L06", "full_cagr"],
+       " and ".join(s3_era_ok[:2]) if s3_era_ok else "none", mix["val_sharpe"], 100 * mix["val_max_drawdown"]))
 w_("## Study 1 verdict: ETFs\n")
 w_("**No.** I tested 92 pre-registered end-of-day strategies on gold, S&P 500, Nasdaq-100 and long Treasury ETFs and "
    "their 2x/3x leveraged versions, with realistic costs. **None survived the pre-agreed validation rules.** "
@@ -176,6 +190,9 @@ w_("| Statistics | Walk-forward, bootstrap confidence intervals, Deflated Sharpe
 w_("| Result | **0 of 92 survive.** 5 near-misses failed only the Deflated Sharpe test |")
 w_("| Study 2 | Commodities (GLD, SLV, USO; UGL, AGQ, UCO): **0 of 26 survive**; best DSR %.2f at N = 118 (see Study 2 below) |"
    % cv["dsr"].max())
+w_("| Study 3 | Long history 1927–2018 (stocks, bonds, commodities, gold): P2 trend and S3 momentum re-tested in 4 eras; "
+   "**0 of 16 validated** (2 pass the era rule at 1x costs only); N = 134 |")
+w_("| GitHub survey | 20 most-starred trading-strategy repos: 0 show clear out-of-sample results, 0 live results, 2 costs |")
 w_("| Engineering | Python, pandas/numpy/scipy; %d unit tests; every run logged (%d rows in `research_log.csv`) |" % (tests, n_runs))
 
 w_("\n## 1. What was tested\n")
@@ -377,6 +394,43 @@ w_("- **Synthetic 2x history before December 2008.** AGQ and UCO are modelled fr
    "extra cost calibrated on 2008–2018 overlap (AGQ %.1f%%, UCO %.1f%% a year). Validation used real prices only."
    % (100 * _cbm["extra_drag"]["AGQ"]["annual"], 100 * _cbm["extra_drag"]["UCO"]["annual"]))
 w_("- **Same 2019–2023 validation window as Study 1**, so gold ideas were tested again on years already seen for gold.")
+
+w_("\n## Study 3: Long-history validation (1927–2018)\n")
+w_("**Question.** Do the closest near-misses hold up over decades, not five years? No new ideas: the P2 multi-asset trend "
+   "rule (6/8/10/12 months) and S3 time-series momentum (3/6/12 months) were re-tested on monthly data for US stocks (Ken "
+   "French), long Treasuries (built from FRED yields), commodity futures (AQR) and gold (World Bank, from 1971). **16 trials "
+   "were frozen before any run (V119–V134); cumulative N = 134.** Costs per trade follow Hurst, Ooi & Pedersen (2017): "
+   "stocks 0.34%, commodities and gold 0.58% before 1993, falling to 0.07–0.10% after 2003. Pass rule: beat own "
+   "buy-and-hold and 60/40 on Sharpe in at least 3 of 4 eras.\n")
+w_("| ID | Rule | " + " | ".join(S3L[e] for e in S3E) + " | Eras passed (1x / 2x / 3x costs / 1-month lag) | Full-span CAGR | Worst 10 years | Max drawdown |")
+w_("|---|---|" + "---|" * len(S3E) + "---|---|---|---|")
+for t, name in (("V119", "P2 trend, 6-month"), ("V122", "P2 trend, 12-month"), ("V131", "S3 momentum, stocks, 12-month"),
+                ("L05", "Equal weight (benchmark)"), ("L06", "60/40 (benchmark)")):
+    x = s3.loc[t]
+    eras = " | ".join(("%.2f" % float(x["%s_x1_sharpe" % e])) + (" ✓" if t.startswith("V") and str(x["%s_x1_pass" % e]) == "True" else "")
+                      for e in S3E)
+    passed = "%d / %d / %d / %d" % tuple(int(float(x["eras_passed_%s" % k])) for k in ("x1", "x2", "x3", "lag1")) if t.startswith("V") else "—"
+    w_("| %s | %s | %s | %s | %.1f%% | %+.1f%%/yr | %.0f%% |" % (t, name, eras, passed, 100 * x["full_cagr"],
+                                                           100 * x["worst10y_ann"], 100 * x["full_max_dd"]))
+w_("\nSharpe ratios by era (✓ = beat both benchmarks). **Verdict: not validated.** V119 and V122 pass the primary rule "
+   "at 1x costs and have high Deflated Sharpe values (%.3f, %.3f), but:" % (s3.loc["V119", "dsr"], s3.loc["V122", "dsr"]))
+w_("- they fall to 2 eras or fewer at 2x or 3x costs and with a one-month signal lag (gold and bond data are monthly "
+   "averages, which flatter trend rules);")
+w_("- their 1950–79 margin over equal weight is only 0.02–0.05 Sharpe, and the 8- and 10-month neighbours pass only 2 eras;")
+w_("- over the full span they earn about the same as equal weight and less than 60/40. The benefit is risk, not return: "
+   "a worst 10-year stretch of about +2% a year and a worst fall of about 20%, vs about 60% for the benchmarks;")
+w_("- the Deflated Sharpe here only shows the Sharpe ratio is above zero by more than luck; over 90 years even equal "
+   "weight (Sharpe %.2f) clears that bar." % s3.loc["L05", "full_sharpe"])
+w_("\nS3 momentum on single assets mostly failed (12 trials; only stocks at 12 months passed the era rule, DSR %.2f). "
+   "Limitations: index-level returns that no one could buy before index funds and futures existed; averaged gold and "
+   "bond data; gold pegged before 1971; the 2000–2018 era overlaps Study 1's in-sample period. Details: "
+   "[`study3_longhist.md`](study3_longhist.md), [`data_quality_longhist.md`](data_quality_longhist.md).\n" % s3.loc["V131", "dsr"])
+w_("## GitHub survey: what popular trading repos show\n")
+w_("The 20 most-starred public trading-strategy repositories (bots, strategy collections, backtesting frameworks) were "
+   "checked by README only; no code was run. **0 of 20 clearly show out-of-sample results** (qlib probably does, without "
+   "saying so), **0 show a live or paper-trading record**, and **2 show results that include costs** (qlib; "
+   "backtesting.py, whose example strategy trails buy-and-hold). One states that its backtests assume no costs. Popularity "
+   "reflects tooling, not evidence. Table: [`github_survey.md`](github_survey.md).\n")
 
 w_("\n## Reproducibility\n")
 w_("- **Code:** `src/` (data, engine, strategies, metrics, validation, risk); `tools/` (each phase's runner and "

@@ -1,10 +1,10 @@
-# Can a $100 account reach $1,000 with simple ETF or commodity strategies? Two pre-registered backtest studies
+# Can a $100 account reach $1,000 with simple ETF or commodity strategies? Three pre-registered backtest studies
 
 _Final report. Data 2004-11-18 to 2023-12-29. The 2024 onward holdout was never opened. Last updated 2026-10-22._
 
-## Headline (both studies)
+## Headline (all three studies)
 
-**0 of 118 pre-registered strategies survived** (Study 1: 0 of 92 on ETFs; Study 2: 0 of 26 on commodities; the Deflated Sharpe test used the cumulative N = 118). Some killed trials and QQQ buy-and-hold had higher 2019–2023 Sharpe ratios than the 70/30 SPY/GLD mix (10 trials above it; the best, V073, 0.99), but none by enough to rule out luck. The 70/30 SPY/GLD mix (Sharpe 0.82, worst drop -25%) beat every commodity trial and is a sensible no-skill baseline.
+**0 of 134 pre-registered strategies were validated** (Study 1: 92 on ETFs; Study 2: 26 on commodities; Study 3: 16 long-history re-tests; the Deflated Sharpe test used the cumulative N). Over 1927–2018, multi-asset trend rules reduced drawdowns sharply (worst fall about -22% vs -61% for equal weight and -63% for 60/40) but did not add meaningful return over equal weight or 60/40 (8.1% a year vs 7.7% and 8.2%; the difference from equal weight is not statistically significant), and the advantage weakened under higher costs or a one-month signal lag. Two of them (V119 and V122) passed Study 3's primary era rule at 1x costs but failed every pre-registered robustness check. In 2019–2023, some killed trials and QQQ had higher Sharpe ratios than a 70/30 SPY/GLD mix (Sharpe 0.82, worst drop -25%), but none by enough to rule out luck; the 70/30 mix beat every commodity trial and is a sensible no-skill baseline.
 
 ## Study 1 verdict: ETFs
 
@@ -21,7 +21,9 @@ _Final report. Data 2004-11-18 to 2023-12-29. The 2024 onward holdout was never 
 | Statistics | Walk-forward, bootstrap confidence intervals, Deflated Sharpe Ratio (N = 92), 7 kill criteria |
 | Result | **0 of 92 survive.** 5 near-misses failed only the Deflated Sharpe test |
 | Study 2 | Commodities (GLD, SLV, USO; UGL, AGQ, UCO): **0 of 26 survive**; best DSR 0.43 at N = 118 (see Study 2 below) |
-| Engineering | Python, pandas/numpy/scipy; 63 unit tests; every run logged (1001 rows in `research_log.csv`) |
+| Study 3 | Long history 1927–2018 (stocks, bonds, commodities, gold): P2 trend and S3 momentum re-tested in 4 eras; **0 of 16 validated** (2 pass the era rule at 1x costs only); N = 134 |
+| GitHub survey | 20 most-starred trading-strategy repos: 0 show clear out-of-sample results, 0 live results, 2 costs |
+| Engineering | Python, pandas/numpy/scipy; 68 unit tests; every run logged (1045 rows in `research_log.csv`) |
 
 ## 1. What was tested
 
@@ -204,9 +206,34 @@ V107 and V108 held oil on 93% of 2021 trading days and 66% of 2022 trading days,
 - **Synthetic 2x history before December 2008.** AGQ and UCO are modelled from SLV and USO before launch, with an extra cost calibrated on 2008–2018 overlap (AGQ 4.3%, UCO 0.9% a year). Validation used real prices only.
 - **Same 2019–2023 validation window as Study 1**, so gold ideas were tested again on years already seen for gold.
 
+## Study 3: Long-history validation (1927–2018)
+
+**Question.** Do the closest near-misses hold up over decades, not five years? No new ideas: the P2 multi-asset trend rule (6/8/10/12 months) and S3 time-series momentum (3/6/12 months) were re-tested on monthly data for US stocks (Ken French), long Treasuries (built from FRED yields), commodity futures (AQR) and gold (World Bank, from 1971). **16 trials were frozen before any run (V119–V134); cumulative N = 134.** Costs per trade follow Hurst, Ooi & Pedersen (2017): stocks 0.34%, commodities and gold 0.58% before 1993, falling to 0.07–0.10% after 2003. Pass rule: beat own buy-and-hold and 60/40 on Sharpe in at least 3 of 4 eras.
+
+| ID | Rule | 1927–49 | 1950–79 | 1980–99 | 2000–18 | Eras passed (1x / 2x / 3x costs / 1-month lag) | Full-span CAGR | Worst 10 years | Max drawdown |
+|---|---|---|---|---|---|---|---|---|---|
+| V119 | P2 trend, 6-month | 0.55 ✓ | 0.93 ✓ | 0.30 | 1.07 ✓ | 3 / 2 / 2 / 1 | 7.9% | +2.3%/yr | -20% |
+| V122 | P2 trend, 12-month | 0.57 ✓ | 0.96 ✓ | 0.42 | 0.98 ✓ | 3 / 2 / 2 / 2 | 8.1% | +1.9%/yr | -22% |
+| V131 | S3 momentum, stocks, 12-month | 0.47 ✓ | 0.55 ✓ | 0.65 | 0.50 ✓ | 3 / 3 / 2 / 1 | 9.8% | +1.6%/yr | -45% |
+| L05 | Equal weight (benchmark) | 0.37 | 0.91 | 0.17 | 0.63 | — | 7.7% | -1.6%/yr | -61% |
+| L06 | 60/40 (benchmark) | 0.36 | 0.44 | 0.74 | 0.47 | — | 8.2% | +0.2%/yr | -63% |
+
+Sharpe ratios by era (✓ = beat both benchmarks). **Verdict: not validated.** V119 and V122 pass the primary rule at 1x costs and have high Deflated Sharpe values (0.997, 0.999), but:
+- they fall to 2 eras or fewer at 2x or 3x costs and with a one-month signal lag (gold and bond data are monthly averages, which flatter trend rules);
+- their 1950–79 margin over equal weight is only 0.02–0.05 Sharpe, and the 8- and 10-month neighbours pass only 2 eras;
+- over the full span they earn about the same as equal weight and less than 60/40. The benefit is risk, not return: a worst 10-year stretch of about +2% a year and a worst fall of about 20%, vs about 60% for the benchmarks;
+- the Deflated Sharpe here only shows the Sharpe ratio is above zero by more than luck; over 90 years even equal weight (Sharpe 0.49) clears that bar.
+
+S3 momentum on single assets mostly failed (12 trials; only stocks at 12 months passed the era rule, DSR 0.90). Limitations: index-level returns that no one could buy before index funds and futures existed; averaged gold and bond data; gold pegged before 1971; the 2000–2018 era overlaps Study 1's in-sample period. Details: [`study3_longhist.md`](study3_longhist.md), [`data_quality_longhist.md`](data_quality_longhist.md).
+
+## GitHub survey: what popular trading repos show
+
+The 20 most-starred public trading-strategy repositories (bots, strategy collections, backtesting frameworks) were checked by README only; no code was run. **0 of 20 clearly show out-of-sample results** (qlib probably does, without saying so), **0 show a live or paper-trading record**, and **2 show results that include costs** (qlib; backtesting.py, whose example strategy trails buy-and-hold). One states that its backtests assume no costs. Popularity reflects tooling, not evidence. Table: [`github_survey.md`](github_survey.md).
+
+
 ## Reproducibility
 
-- **Code:** `src/` (data, engine, strategies, metrics, validation, risk); `tools/` (each phase's runner and report); `tests/` (63 tests: lookahead, costs, cash interest, adjusted prices, the $1,000 switch, synthetic formula, kill rules, Monte Carlo).
+- **Code:** `src/` (data, engine, strategies, metrics, validation, risk); `tools/` (each phase's runner and report); `tests/` (68 tests: lookahead, costs, cash interest, adjusted prices, the $1,000 switch, synthetic formula, kill rules, Monte Carlo).
 - **Records:** `research_log.csv` logs every run, including failures; `config.yaml` holds every parameter; `PROGRESS.md` holds the decision history; `AUDIT.md` holds the third-party code audit.
 - **Environment:** seed 20261022. Python 3.14.8, pandas 3.1.0, numpy 2.5.4. Data hashes are in `data/raw/download_meta.json`.
 
