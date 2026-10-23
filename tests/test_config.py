@@ -88,3 +88,24 @@ def test_study3_frozen_list():
     with open(PROJECT_ROOT / "research_log.csv", newline="") as fh:
         rows = [r for r in csv.DictReader(fh) if r["phase"] == "study3-freeze"]
     assert [r["test_id"] for r in rows if r["result"] == "PRE-REGISTERED"] == ["V%03d" % i for i in range(119, 135)]
+
+
+def test_usdjpy_study1_frozen_list():
+    c = cfg["usdjpy_study1"]
+    assert c["frozen"] is True and c["trials"] == 8 and c["cumulative_trials_for_dsr"] == 142
+    assert cfg["specialists"]["active"] == ["usdjpy"]
+    with open(PROJECT_ROOT / "research_log.csv", newline="") as fh:
+        rows = [r for r in csv.DictReader(fh) if r["phase"] == "fx1-freeze"]
+    assert [r["test_id"] for r in rows if r["result"] == "PRE-REGISTERED"] == ["V%03d" % i for i in range(135, 143)]
+    from src.specialists import usdjpy as U
+    import pandas as pd
+    reg = [(r["test_id"], r["strategy"], r["params"]) for r in rows if r["result"] == "PRE-REGISTERED"]
+    cal = pd.bdate_range("2010-01-01", periods=300)
+    d = pd.DataFrame({k: 0.01 for k in ("us1", "us2", "us10", "tbill", "jp1", "jp2", "jp10")}, index=cal)
+    d["spot"], d["vix"] = 100.0, 15.0
+    assert [(t, h, p) for t, h, p, _ in U.build_trials(d)] == reg
+
+
+def test_research_memory_chain_intact():
+    from src.memory import Ledger, RESEARCH
+    assert Ledger(RESEARCH).verify() is None

@@ -345,3 +345,29 @@ Both stay in monitoring mode. The existing gold monitoring (watchlist, paper boo
 - **From this repository:** gold, futures and tax facts in `research/IDEA_POOL_COMMODITIES.md` and `research/sources_commodities.csv`; trial history in `research_log.csv`; study results in `reports/`.
 
 _This file is the planning record for future sessions. Update it, don't overwrite it, as decisions are made._
+
+---
+
+## 15. Decisions recorded and progress (2026-10-23)
+
+**Your decisions:**
+1. **Markets:** USD/JPY active; gold and GBP/USD in monitoring mode.
+2. **Ledgers:** $100 gold; $10,000 per FX pair; maximum 1× notional; reported in % and per $100.
+3. **FX periods:** in-sample 1990–2014; validation 2015–2023; 2024+ locked.
+4. **Data:** daily only. ALFRED is allowed, with a **rule 1 amendment**: a read-only FRED/ALFRED API key, read only from the environment variable `FRED_API_KEY`, never printed, logged or committed, and set by you. Dukascopy, HistData, TrueFX and the World Gold Council are deferred until a pre-registered hypothesis needs them.
+5. **Holidays:** rule-based calendars, no new dependency.
+6. **Publication:** code and the source library are public; data, `live/`, `paper/` and `briefs/` stay private.
+7. **Housekeeping:** you push and create the backup repo yourself.
+
+**Done (steps 1–6 and 8, then the step 9 pre-registration):**
+- **Specialists:** `config.yaml specialists` and `src/specialists/` (an active/monitoring gate).
+- **Market clock:** `src/clock.py`, with IANA zones, sessions, DST, the FX week, rollover, and US (NYSE, Fed), UK and Japanese holidays.
+- **Research memory:** `src/memory.py`, an append-only, hash-chained ledger at `research/memory/research.jsonl`.
+- **Knowledge library:** `src/library.py` and `tools/build_library.py`, 228 sources in `research/library/library.csv` with evidence classes A–F/O and an FTS5 search index.
+- **USD/JPY data:** `tools/download_usdjpy.py` and `tools/validate_usdjpy.py`, report in `reports/specialists/usdjpy/data_quality.md`.
+- **FX engine:** `src/fx_engine.py`, with synthetic-data tests only.
+- **Pre-registration:** 8 trials, V135–V142, in `research/USDJPY_PREREGISTRATION.md`; cumulative N = 142.
+
+**Deferred:**
+- Step 7, the GitHub deep review: not needed for this pre-registration.
+- Steps 10–15.

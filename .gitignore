@@ -26,3 +26,6 @@ paper/
 # local summary export (never pushed)
 SUMMARY.md
 SUMMARY.pdf
+
+# derived knowledge-library index (rebuilt by tools/build_library.py)
+research/library/library.sqlite

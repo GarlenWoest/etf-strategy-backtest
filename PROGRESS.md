@@ -1,9 +1,16 @@
 # PROGRESS
 
-_Last updated: 2026-10-23 (expansion plan written; waiting for approval)_
+_Last updated: 2026-10-23 (USD/JPY pre-registered; waiting for approval to run)_
 
 ## Current phase
-**Expansion planning (2026-10-23): Phase 0 audit, gap analysis and plan written to `research/EXPANSION_PLAN.md`. Nothing implemented; waiting for your approval.**
+**USD/JPY specialist: built through pre-registration (2026-10-23). 8 trials frozen (V135–V142, cumulative N = 142). No backtest has been run; waiting for your approval to run them.**
+- See `research/USDJPY_PREREGISTRATION.md` (trial list), `research/EXPANSION_PLAN.md` section 15 (decisions and progress), `reports/specialists/usdjpy/data_quality.md`.
+- New modules: `src/clock.py`, `src/memory.py`, `src/library.py`, `src/fx_engine.py`, `src/specialists/`. The existing engine, studies, tasks and paper books are unchanged.
+- **Rule 1 amendment (user, 2026-10-23):** a read-only FRED/ALFRED API key is allowed, read only from the env var `FRED_API_KEY`, never printed, logged or committed. Not used yet: none of the frozen hypotheses needs revised macro data.
+- 122 tests pass.
+
+### Expansion planning (2026-10-23)
+**Phase 0 audit, gap analysis and plan written to `research/EXPANSION_PLAN.md`.**
 - Scope: gold, USD/JPY and GBP/USD specialists as a modular extension; existing studies, holdout, tasks and paper books untouched.
 - Baseline verified: 90 tests pass; research log 1,045 rows with 134 unique pre-registered trials; next trial ID V135 (cumulative N continues from 134).
 - Recommendation: activate USD/JPY first; gold and GBP/USD in monitoring mode.
@@ -79,4 +86,4 @@ The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It ha
 
 ## Notes
 - `data/` and `results/` are not committed. Hashes are in `data/raw/download_meta.json` and `data/clean/build_meta.json`.
-- 90 tests pass (`pytest tests`). `research_log.csv` rows: see `wc -l`; commodity rows are phases 9-freeze, 9-4-in-sample, 9-5-*, 9-6-kill.
+- 122 tests pass (`pytest tests`). `research_log.csv` rows: see `wc -l`; commodity rows are phases 9-freeze, 9-4-in-sample, 9-5-*, 9-6-kill.

@@ -1044,3 +1044,13 @@ L03,2026-10-23T00:42:23Z,study3-run,B&H commodities,commodities,commodities,,192
 L04,2026-10-23T00:42:23Z,study3-run,B&H gold,gold,gold,,1972-11-30..2018-12-31 monthly,1,0.066192,,0.1868,-0.620796,,BENCHMARK-RUN,,
 L05,2026-10-23T00:42:23Z,study3-run,Equal weight (available assets),all,all,,1927-08-31..2018-12-31 monthly,1,0.077029,,0.4882,-0.606331,,BENCHMARK-RUN,,
 L06,2026-10-23T00:42:23Z,study3-run,60/40 stocks/bonds,stocks|bonds,stocks|bonds,,1927-08-31..2018-12-31 monthly,1,0.082148,,0.4578,-0.629023,,BENCHMARK-RUN,,
+UB01,2026-10-23T16:19:55Z,fx1-freeze,flat_cash,USDJPY,USDJPY,overlay 0; cash earns DTB3,,,,,,,,BENCHMARK,,USD/JPY study 1; not a trial
+UB02,2026-10-23T16:19:55Z,fx1-freeze,always_long_usdjpy,USDJPY,USDJPY,"+1 x equity, weekly",,,,,,,,BENCHMARK,,USD/JPY study 1; not a trial
+V135,2026-10-23T16:19:55Z,fx1-freeze,UJ-H1 carry level,USDJPY,USDJPY,maturity=1Y;threshold=1.0pp,,,,,,,,PRE-REGISTERED,,cumulative trial 135 of 142; single-pair evidence weaker than multi-currency portfolios
+V136,2026-10-23T16:19:55Z,fx1-freeze,UJ-H1 carry level,USDJPY,USDJPY,maturity=2Y;threshold=1.0pp,,,,,,,,PRE-REGISTERED,,cumulative trial 136 of 142; single-pair evidence weaker than multi-currency portfolios
+V137,2026-10-23T16:19:55Z,fx1-freeze,UJ-H2 differential momentum,USDJPY,USDJPY,lookback=63d;2Y,,,,,,,,PRE-REGISTERED,,cumulative trial 137 of 142; single-pair evidence weaker than multi-currency portfolios
+V138,2026-10-23T16:19:55Z,fx1-freeze,UJ-H2 differential momentum,USDJPY,USDJPY,lookback=126d;2Y,,,,,,,,PRE-REGISTERED,,cumulative trial 138 of 142; single-pair evidence weaker than multi-currency portfolios
+V139,2026-10-23T16:19:55Z,fx1-freeze,UJ-H3 carry with risk-off filter,USDJPY,USDJPY,filter=VIX>p80(252d);2Y;1.0pp,,,,,,,,PRE-REGISTERED,,cumulative trial 139 of 142; single-pair evidence weaker than multi-currency portfolios
+V140,2026-10-23T16:19:55Z,fx1-freeze,UJ-H3 carry with risk-off filter,USDJPY,USDJPY,filter=USDJPY_vol21>p80(252d);2Y;1.0pp,,,,,,,,PRE-REGISTERED,,cumulative trial 140 of 142; single-pair evidence weaker than multi-currency portfolios
+V141,2026-10-23T16:19:55Z,fx1-freeze,UJ-H4 relative curve slope,USDJPY,USDJPY,lookback=63d;RS=(US10-US2)-(JGB10-JGB2),,,,,,,,PRE-REGISTERED,,cumulative trial 141 of 142; single-pair evidence weaker than multi-currency portfolios
+V142,2026-10-23T16:19:55Z,fx1-freeze,UJ-H4 relative curve slope,USDJPY,USDJPY,lookback=126d;RS=(US10-US2)-(JGB10-JGB2),,,,,,,,PRE-REGISTERED,,cumulative trial 142 of 142; single-pair evidence weaker than multi-currency portfolios
