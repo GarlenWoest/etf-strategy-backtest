@@ -22,3 +22,7 @@ paper/
 
 # private backup git database for paper/, live/, briefs/ (never pushed to this repository)
 .backup.git/
+
+# local summary export (never pushed)
+SUMMARY.md
+SUMMARY.pdf
