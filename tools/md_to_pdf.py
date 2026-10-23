@@ -18,27 +18,28 @@ ROOT = Path(__file__).resolve().parent.parent
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 CSS = """
-@page { size: Letter; margin: 0.8in 0.75in 0.85in 0.75in;
+@page { size: Letter; margin: 0.6in 0.65in 0.7in 0.65in;
         @bottom-center { content: "Page " counter(page) " of " counter(pages); font: 9pt -apple-system, Helvetica, Arial, sans-serif; color: #666; } }
 @page :first { @bottom-center { content: none; } }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-body { font: 10.5pt/1.45 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1a1a1a; }
-.title-page { height: 8.9in; display: flex; flex-direction: column; justify-content: center; break-after: page; }
+body { font: 9.4pt/1.34 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1a1a1a; }
+.title-page { height: 9.5in; display: flex; flex-direction: column; justify-content: center; break-after: page; }
 .title-page .kicker { font-size: 11pt; letter-spacing: .12em; text-transform: uppercase; color: #8a6d1f; margin-bottom: 14pt; }
 .title-page h1 { font-size: 26pt; line-height: 1.2; margin: 0 0 18pt; border: 0; }
 .title-page .sub { font-size: 11.5pt; color: #444; max-width: 5.6in; }
 .title-page .meta { margin-top: 36pt; font-size: 10.5pt; color: #555; border-top: 2px solid #8a6d1f; padding-top: 10pt; width: 4in; }
-h2 { font-size: 15pt; margin: 20pt 0 6pt; padding-bottom: 3pt; border-bottom: 1.5px solid #d9cfb4; break-after: avoid; }
-h3 { font-size: 12pt; margin: 14pt 0 4pt; break-after: avoid; }
-p { margin: 5pt 0 7pt; }
-ul { margin: 4pt 0 8pt; padding-left: 18pt; } li { margin: 2pt 0; } li ul { margin: 2pt 0; }
-table { border-collapse: collapse; width: 100%; margin: 8pt 0 10pt; font-size: 9pt; break-inside: avoid; }
-th, td { border: 1px solid #cfcfcf; padding: 3.5pt 5pt; text-align: left; vertical-align: top; }
+h2 { font-size: 13pt; margin: 13pt 0 4pt; padding-bottom: 3pt; border-bottom: 1.5px solid #d9cfb4; break-after: avoid; }
+h3 { font-size: 11pt; margin: 9pt 0 3pt; break-after: avoid; }
+p { margin: 3pt 0 5pt; }
+ul { margin: 2pt 0 5pt; padding-left: 16pt; } li { margin: 1pt 0; } li ul { margin: 2pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 5pt 0 7pt; font-size: 8.2pt; break-inside: avoid; }
+th, td { border: 1px solid #cfcfcf; padding: 2.2pt 4pt; text-align: left; vertical-align: top; }
 th { background: #f3efe4; font-weight: 600; } tr:nth-child(even) td { background: #fafafa; }
-figure { margin: 10pt 0 12pt; break-inside: avoid; text-align: center; }
-figure img { max-width: 100%; max-height: 4.6in; } figcaption { font-size: 8.5pt; color: #555; margin-top: 3pt; }
+figure { margin: 6pt 0 8pt; break-inside: avoid; text-align: center; }
+figure img { max-width: 100%; max-height: 3.5in; } figcaption { font-size: 8.5pt; color: #555; margin-top: 3pt; }
 code { font: 8.8pt Menlo, monospace; background: #f2f2f2; padding: 0 2pt; border-radius: 2pt; }
 a { color: #1f4e8a; text-decoration: none; }
+td.nowrap { white-space: nowrap; }
 """
 
 
@@ -55,7 +56,8 @@ def table(rows):
     cells = [[c.strip() for c in r.strip().strip("|").split("|")] for r in rows]
     head, body = cells[0], cells[2:]
     out = ["<table><thead><tr>" + "".join("<th>%s</th>" % inline(c) for c in head) + "</tr></thead><tbody>"]
-    out += ["<tr>" + "".join("<td>%s</td>" % inline(c) for c in r) + "</tr>" for r in body]
+    cell = lambda c: '<td class="nowrap">%s</td>' % inline(c) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", c) else "<td>%s</td>" % inline(c)
+    out += ["<tr>" + "".join(cell(c) for c in r) + "</tr>" for r in body]
     return "\n".join(out) + "</tbody></table>"
 
 
@@ -74,7 +76,8 @@ def bullets(lines):
                 stack.append(ind)
             else:
                 out.append("</li>")
-            out.append("<li>" + inline(txt[2:]))
+            item = txt[2:]
+            out.append("<li>" + ("&#9744;&nbsp;" + inline(item[4:]) if item.startswith("[ ] ") else inline(item)))
         elif txt:
             out.append("<p>%s</p>" % inline(txt))
     while stack:
