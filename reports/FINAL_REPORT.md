@@ -1,8 +1,12 @@
-# Can a $100 account reach $1,000 with simple ETF strategies? A pre-registered backtest study
+# Can a $100 account reach $1,000 with simple ETF or commodity strategies? Two pre-registered backtest studies
 
 _Final report. Data 2004-11-18 to 2023-12-29. The 2024 onward holdout was never opened. Last updated 2026-10-22._
 
-## Verdict
+## Headline (both studies)
+
+**0 of 118 pre-registered strategies survived** (Study 1: 0 of 92 on ETFs; Study 2: 0 of 26 on commodities; the Deflated Sharpe test used the cumulative N = 118). Some killed trials and QQQ buy-and-hold had higher 2019–2023 Sharpe ratios than the 70/30 SPY/GLD mix (10 trials above it; the best, V073, 0.99), but none by enough to rule out luck. The 70/30 SPY/GLD mix (Sharpe 0.82, worst drop -25%) beat every commodity trial and is a sensible no-skill baseline.
+
+## Study 1 verdict: ETFs
 
 **No.** I tested 92 pre-registered end-of-day strategies on gold, S&P 500, Nasdaq-100 and long Treasury ETFs and their 2x/3x leveraged versions, with realistic costs. **None survived the pre-agreed validation rules.** 13 of 92 had a better risk-adjusted return than a simple equal-weight portfolio of the four ETFs in the 2019–2023 out-of-sample period, but the best of them could be explained by luck from testing so many variants. Its Deflated Sharpe probability was 0.73, against the 0.95 required. The closest call, a monthly multi-asset trend filter, had a higher Sharpe ratio than the equal-weight portfolio (0.99 vs 0.81) but a lower return (10.3% vs 12.1% a year), with half the drawdown. That difference is not statistically reliable. Leveraged buy-and-hold raised returns in good years and lost 90%+ in bad ones (UPRO and TQQQ in 2008, TMF in 2020–2023). For a $100 account, monthly savings matter far more than strategy choice: $100 a month reaches $1,000 in 9 months. In the informational simulation, even the best near-miss took a median of about 11 years to get there from $100 alone. **The honest conclusion: nothing tested here beat a low-cost diversified index portfolio once overfitting was accounted for.**
 
@@ -16,7 +20,8 @@ _Final report. Data 2004-11-18 to 2023-12-29. The 2024 onward holdout was never 
 | Design | 92 variants frozen before any backtest; in-sample 2006–2018, validation 2019–2023, holdout 2024+ (locked) |
 | Statistics | Walk-forward, bootstrap confidence intervals, Deflated Sharpe Ratio (N = 92), 7 kill criteria |
 | Result | **0 of 92 survive.** 5 near-misses failed only the Deflated Sharpe test |
-| Engineering | Python, pandas/numpy/scipy; 57 unit tests; every run logged (764 rows in `research_log.csv`) |
+| Study 2 | Commodities (GLD, SLV, USO; UGL, AGQ, UCO): **0 of 26 survive**; best DSR 0.43 at N = 118 (see Study 2 below) |
+| Engineering | Python, pandas/numpy/scipy; 63 unit tests; every run logged (1001 rows in `research_log.csv`) |
 
 ## 1. What was tested
 
@@ -135,9 +140,73 @@ With **$50 or $100 added per month**, every series reaches $1,000 in roughly 0.7
 5. **Pre-register the holdout test now:** if a new, independently motivated strategy is defined, run it once on 2024 onward and accept the result.
 6. **Treat contributions as the main lever for small accounts.** At $100, saving rate and diversification dominate any timing rule tested here.
 
+## Study 2: Commodities
+
+**Question.** After Study 1, does an evidence-backed end-of-day strategy on gold, silver or oil do better? The research phase graded 153 sources (114 kept; `research/sources_commodities.csv`) into a ranked idea pool (`research/IDEA_POOL_COMMODITIES.md`). Five ideas were chosen and **26 trials were frozen (V093–V118) before any backtest**; the Deflated Sharpe test used the **cumulative N = 118** (92 + 26). Same engine, costs, splits (in-sample 2007-07-02 to 2018, validation 2019–2023, holdout locked) and kill criteria K1–K7, unchanged. Copper was dropped (CPER unusable before 2017).
+
+| Idea | Rule | Trials |
+|---|---|---|
+| I01 Momentum basket | Month-end: 1/3 each in GLD/SLV/USO whose 3/6/12-month return beats T-bills; 1x or 2x | 6 |
+| I03 Volatility-scaled trend | Carver EWMAC(16,64), sized to 15/20/25% target volatility, weekly; gold only or basket | 6 |
+| I04 Dual momentum | Month-end: hold the best 3/6/12-month performer of GLD/SLV/USO if it beats T-bills; 1x or 2x | 6 |
+| I05 Real-yield filter | Hold GLD/UGL when the 20-day average 10-year TIPS yield is below its 120/250-day average | 4 |
+| I06 Dollar-trend filter | Hold GLD/UGL when the broad dollar index is below its 100/200-day average | 4 |
+
+FRED signals used only values already published on each date (TIPS yield from the 2nd trading day after; dollar index from the Wednesday after its week). Benchmarks (not trials): buy-and-hold of each fund, SPY, equal weight GLD/SLV/USO (K1's equal weight) and 70/30 SPY/GLD rebalanced monthly.
+
+### Kill table
+
+**0 of 26 survive.** Best Deflated Sharpe at N = 118: **0.430** (V108, I04_dual_momentum), against 0.95 required.
+
+| Criterion | Trials failing |
+|---|---|
+| K1 does not beat own buy-and-hold and equal weight | 20 |
+| K2 Deflated Sharpe (N=118) below 0.95 | 26 |
+| K3 profitable at 1x, not at 2x costs | 0 |
+| K4 too few OOS trades / years | 13 |
+| K5 edge gone one grid step away | 18 |
+| K6 OOS Sharpe below half of in-sample | 6 |
+| K7 fell to $20 in a stress period | 0 |
+
+Full table: [`commodities_kill_table.md`](commodities_kill_table.md). Validation detail, walk-forward and stress tests: [`commodities_phase5_validation.md`](commodities_phase5_validation.md).
+
+### Compared with the 70/30 SPY/GLD benchmark (validation 2019–2023)
+
+| Series | Sharpe | CAGR | Max drawdown |
+|---|---|---|---|
+| V108 I04_dual_momentum (best DSR) | 0.63 | 23.7% | -66.9% |
+| V107 same rule at 1x | 0.63 | 18.1% | -41.4% |
+| 70/30 SPY/GLD | 0.82 | 14.4% | -25.2% |
+| SPY | 0.72 | 15.8% | -33.7% |
+| GLD buy-and-hold | 0.56 | 9.6% | -22.0% |
+| Equal weight GLD/SLV/USO | 0.42 | 9.0% | -40.7% |
+
+No commodity trial matched the 70/30 mix on a risk-adjusted basis; the best had a higher return only by taking a much deeper drawdown.
+
+### Dependence on oil in 2021–2022
+
+The best commodity results came from rotating into oil during its 2021–2022 rally. Calendar-year returns:
+
+| Series | 2019 | 2020 | 2021 | 2022 | 2023 |
+|---|---|---|---|---|---|
+| V107 dual momentum 6m, 1x | +4% | +25% | +71% | +43% | -28% |
+| V108 same, 2x | +0% | +26% | +157% | +74% | -49% |
+| 70/30 SPY/GLD | +28% | +21% | +18% | -13% | +22% |
+| USO | +33% | -68% | +65% | +29% | -5% |
+
+V107 and V108 held oil on 93% of 2021 trading days and 66% of 2022 trading days, then lost 28% and 49% in 2023. One commodity rally in a five-year window is exactly the kind of result the Deflated Sharpe test discounts.
+
+### Study 2 limitations
+
+- **Single data source** (Yahoo Finance; the Stooq cross-check is still blocked).
+- **USO changed structure in April 2020** (from front-month to a spread of futures months, plus a 1-for-8 reverse split). Oil results before and after come from a differently built fund; every oil result is flagged.
+- **FRED revisions not modelled.** Signals used today's FRED vintage, not the values as first published (release lags were modelled; revisions were not).
+- **Synthetic 2x history before December 2008.** AGQ and UCO are modelled from SLV and USO before launch, with an extra cost calibrated on 2008–2018 overlap (AGQ 4.3%, UCO 0.9% a year). Validation used real prices only.
+- **Same 2019–2023 validation window as Study 1**, so gold ideas were tested again on years already seen for gold.
+
 ## Reproducibility
 
-- **Code:** `src/` (data, engine, strategies, metrics, validation, risk); `tools/` (each phase's runner and report); `tests/` (57 tests: lookahead, costs, cash interest, adjusted prices, the $1,000 switch, synthetic formula, kill rules, Monte Carlo).
+- **Code:** `src/` (data, engine, strategies, metrics, validation, risk); `tools/` (each phase's runner and report); `tests/` (63 tests: lookahead, costs, cash interest, adjusted prices, the $1,000 switch, synthetic formula, kill rules, Monte Carlo).
 - **Records:** `research_log.csv` logs every run, including failures; `config.yaml` holds every parameter; `PROGRESS.md` holds the decision history; `AUDIT.md` holds the third-party code audit.
 - **Environment:** seed 20261022. Python 3.14.8, pandas 3.1.0, numpy 2.5.4. Data hashes are in `data/raw/download_meta.json`.
 

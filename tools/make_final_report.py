@@ -117,6 +117,22 @@ n_runs = sum(1 for _ in open(PROJECT_ROOT / "research_log.csv")) - 1
 tests = sum(1 for p in (PROJECT_ROOT / "tests").glob("test_*.py") for line in open(p) if line.startswith("def test_"))
 
 
+# ---------------------------------------------------------------- Study 2 (commodities) numbers
+c5 = pd.read_csv(RES / "commodities_phase5_metrics.csv", index_col=0)
+c6 = pd.read_csv(RES / "commodities_phase6_kill.csv", index_col=0)
+ceq = pd.read_csv(RES / "commodities_equity_1x.csv", index_col=0, parse_dates=True)
+_cbm = json.load(open(PROJECT_ROOT / "data/clean/commodities/build_meta.json"))
+cv = c5[c5.index.str.startswith("V")]
+c_surv = int((~c6["killed"]).sum())
+c_crit = {k: int(c6["reasons"].fillna("").str.contains(k + " ").sum()) for k in crit}
+c_best = cv["dsr"].idxmax()
+mix = c5.loc["CB09"]
+all_val = pd.concat([m5.loc[m5.index.str.startswith("V"), "val_sharpe"], cv["val_sharpe"]])
+n_above_mix = int((all_val > mix["val_sharpe"]).sum())
+best_any = all_val.idxmax()
+yr = lambda t: ceq[t].resample("YE").last().pct_change().loc["2019":"2023"]
+
+
 def pc(x):
     return "%.0f%%" % (100 * x) if x >= 0.005 or x == 0 else "<1%"
 
@@ -127,10 +143,17 @@ def yrs(x):
 
 L = []
 w_ = L.append
-w_("# Can a $100 account reach $1,000 with simple ETF strategies? A pre-registered backtest study\n")
+w_("# Can a $100 account reach $1,000 with simple ETF or commodity strategies? Two pre-registered backtest studies\n")
 w_("_Final report. Data 2004-11-18 to 2023-12-29. The 2024 onward holdout was never opened. Last updated %s._\n" %
    pd.Timestamp.now().strftime("%Y-%m-%d"))
-w_("## Verdict\n")
+w_("## Headline (both studies)\n")
+w_("**0 of %d pre-registered strategies survived** (Study 1: 0 of 92 on ETFs; Study 2: 0 of 26 on commodities; "
+   "the Deflated Sharpe test used the cumulative N = %d). Some killed trials and QQQ buy-and-hold had higher 2019–2023 "
+   "Sharpe ratios than the 70/30 SPY/GLD mix (%d trials above it; the best, %s, %.2f), but none by enough to rule out "
+   "luck. The 70/30 SPY/GLD mix (Sharpe %.2f, worst drop %.0f%%) beat every commodity trial and is a sensible no-skill "
+   "baseline.\n" % (92 + len(cv), 92 + len(cv), n_above_mix, best_any, all_val.max(), mix["val_sharpe"],
+                     100 * mix["val_max_drawdown"]))
+w_("## Study 1 verdict: ETFs\n")
 w_("**No.** I tested 92 pre-registered end-of-day strategies on gold, S&P 500, Nasdaq-100 and long Treasury ETFs and "
    "their 2x/3x leveraged versions, with realistic costs. **None survived the pre-agreed validation rules.** "
    "%d of 92 had a better risk-adjusted return than a simple equal-weight portfolio of the four ETFs in the 2019–2023 "
@@ -151,6 +174,8 @@ w_("| Data | Daily adjusted OHLC, 2004-11-18 to 2023-12-29 (Yahoo Finance); 3-mo
 w_("| Design | 92 variants frozen before any backtest; in-sample 2006–2018, validation 2019–2023, holdout 2024+ (locked) |")
 w_("| Statistics | Walk-forward, bootstrap confidence intervals, Deflated Sharpe Ratio (N = 92), 7 kill criteria |")
 w_("| Result | **0 of 92 survive.** 5 near-misses failed only the Deflated Sharpe test |")
+w_("| Study 2 | Commodities (GLD, SLV, USO; UGL, AGQ, UCO): **0 of 26 survive**; best DSR %.2f at N = 118 (see Study 2 below) |"
+   % cv["dsr"].max())
 w_("| Engineering | Python, pandas/numpy/scipy; %d unit tests; every run logged (%d rows in `research_log.csv`) |" % (tests, n_runs))
 
 w_("\n## 1. What was tested\n")
@@ -297,6 +322,61 @@ w_("5. **Pre-register the holdout test now:** if a new, independently motivated 
    "2024 onward and accept the result.")
 w_("6. **Treat contributions as the main lever for small accounts.** At $100, saving rate and diversification "
    "dominate any timing rule tested here.")
+
+w_("\n## Study 2: Commodities\n")
+w_("**Question.** After Study 1, does an evidence-backed end-of-day strategy on gold, silver or oil do better? The "
+   "research phase graded 153 sources (114 kept; `research/sources_commodities.csv`) into a ranked idea pool "
+   "(`research/IDEA_POOL_COMMODITIES.md`). Five ideas were chosen and **26 trials were frozen (V093–V118) before any "
+   "backtest**; the Deflated Sharpe test used the **cumulative N = 118** (92 + 26). Same engine, costs, splits "
+   "(in-sample %s to 2018, validation 2019–2023, holdout locked) and kill criteria K1–K7, unchanged. Copper was "
+   "dropped (CPER unusable before 2017).\n" % cfg["commodity_study"]["evaluation_start"])
+w_("| Idea | Rule | Trials |\n|---|---|---|")
+w_("| I01 Momentum basket | Month-end: 1/3 each in GLD/SLV/USO whose 3/6/12-month return beats T-bills; 1x or 2x | 6 |")
+w_("| I03 Volatility-scaled trend | Carver EWMAC(16,64), sized to 15/20/25% target volatility, weekly; gold only or basket | 6 |")
+w_("| I04 Dual momentum | Month-end: hold the best 3/6/12-month performer of GLD/SLV/USO if it beats T-bills; 1x or 2x | 6 |")
+w_("| I05 Real-yield filter | Hold GLD/UGL when the 20-day average 10-year TIPS yield is below its 120/250-day average | 4 |")
+w_("| I06 Dollar-trend filter | Hold GLD/UGL when the broad dollar index is below its 100/200-day average | 4 |")
+w_("\nFRED signals used only values already published on each date (TIPS yield from the 2nd trading day after; dollar "
+   "index from the Wednesday after its week). Benchmarks (not trials): buy-and-hold of each fund, SPY, equal weight "
+   "GLD/SLV/USO (K1's equal weight) and 70/30 SPY/GLD rebalanced monthly.\n")
+w_("### Kill table\n")
+w_("**%d of %d survive.** Best Deflated Sharpe at N = 118: **%.3f** (%s, %s), against 0.95 required.\n"
+   % (c_surv, len(cv), cv.at[c_best, "dsr"], c_best, cv.at[c_best, "strategy"]))
+w_("| Criterion | Trials failing |\n|---|---|")
+_cn = {"K1": "does not beat own buy-and-hold and equal weight", "K2": "Deflated Sharpe (N=118) below 0.95",
+       "K3": "profitable at 1x, not at 2x costs", "K4": "too few OOS trades / years", "K5": "edge gone one grid step away",
+       "K6": "OOS Sharpe below half of in-sample", "K7": "fell to $20 in a stress period"}
+for k in crit:
+    w_("| %s %s | %d |" % (k, _cn[k], c_crit[k]))
+w_("\nFull table: [`commodities_kill_table.md`](commodities_kill_table.md). Validation detail, walk-forward and stress "
+   "tests: [`commodities_phase5_validation.md`](commodities_phase5_validation.md).\n")
+w_("### Compared with the 70/30 SPY/GLD benchmark (validation 2019–2023)\n")
+w_("| Series | Sharpe | CAGR | Max drawdown |\n|---|---|---|---|")
+for t, name in ((c_best, "%s %s (best DSR)" % (c_best, cv.at[c_best, "strategy"])), ("V107", "V107 same rule at 1x"),
+                ("CB09", "70/30 SPY/GLD"), ("CB07", "SPY"), ("CB01", "GLD buy-and-hold"), ("CB08", "Equal weight GLD/SLV/USO")):
+    if t == "V107" and c_best == "V107":
+        continue
+    r = c5.loc[t]
+    w_("| %s | %.2f | %.1f%% | %.1f%% |" % (name, r["val_sharpe"], 100 * r["val_cagr"], 100 * r["val_max_drawdown"]))
+w_("\nNo commodity trial matched the 70/30 mix on a risk-adjusted basis; the best had a higher return only by taking "
+   "a much deeper drawdown.\n")
+w_("### Dependence on oil in 2021–2022\n")
+w_("The best commodity results came from rotating into oil during its 2021–2022 rally. Calendar-year returns:\n")
+w_("| Series | " + " | ".join(str(y) for y in range(2019, 2024)) + " |\n|---|" + "---|" * 5)
+for t, name in (("V107", "V107 dual momentum 6m, 1x"), ("V108", "V108 same, 2x"), ("CB09", "70/30 SPY/GLD"), ("CB03", "USO")):
+    w_("| %s | %s |" % (name, " | ".join("%+.0f%%" % (100 * x) for x in yr(t))))
+w_("\nV107 and V108 held oil on 93% of 2021 trading days and 66% of 2022 trading days, then lost 28% and 49% in 2023. One commodity "
+   "rally in a five-year window is exactly the kind of result the Deflated Sharpe test discounts.\n")
+w_("### Study 2 limitations\n")
+w_("- **Single data source** (Yahoo Finance; the Stooq cross-check is still blocked).")
+w_("- **USO changed structure in April 2020** (from front-month to a spread of futures months, plus a 1-for-8 reverse "
+   "split). Oil results before and after come from a differently built fund; every oil result is flagged.")
+w_("- **FRED revisions not modelled.** Signals used today's FRED vintage, not the values as first published "
+   "(release lags were modelled; revisions were not).")
+w_("- **Synthetic 2x history before December 2008.** AGQ and UCO are modelled from SLV and USO before launch, with an "
+   "extra cost calibrated on 2008–2018 overlap (AGQ %.1f%%, UCO %.1f%% a year). Validation used real prices only."
+   % (100 * _cbm["extra_drag"]["AGQ"]["annual"], 100 * _cbm["extra_drag"]["UCO"]["annual"]))
+w_("- **Same 2019–2023 validation window as Study 1**, so gold ideas were tested again on years already seen for gold.")
 
 w_("\n## Reproducibility\n")
 w_("- **Code:** `src/` (data, engine, strategies, metrics, validation, risk); `tools/` (each phase's runner and "
