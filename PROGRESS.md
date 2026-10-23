@@ -1,14 +1,18 @@
 # PROGRESS
 
-_Last updated: 2026-10-22 (Phase 9 research complete; waiting for your pick)_
+_Last updated: 2026-10-23 (commodity study Phases 4–6 complete; 0 of 26 survive)_
 
 ## Current phase
-**Phase 9 (commodities research), steps a–d complete. Stopped for your choice of ideas.** Nothing pre-registered, nothing backtested, no instrument switched.
+**Commodity study: Phases 4–6 complete. 0 of 26 new trials survive. Stopped, per your instruction.** Holdout still locked; nothing goes to Phase 7 or Phase 10 alerts.
 
-- 9a/9b: 153 sources found, 114 kept (95 strategy evidence + 19 instrument/tax facts), 39 rejected. See `research/sources_commodities.csv`.
-- 9c: daily data for GLD, IAU, GLDM, SLV, USO, CPER, UGL, AGQ, UCO, DGP and SPY, plus front-month futures, GVZ/OVX and FRED macro series, all through 2023-12-29. 0 holdout rows. Report: `reports/data_quality_commodities.md`. Your decision needed: CPER is unusable before 2017.
-- 9d: `research/IDEA_POOL_COMMODITIES.md` has 14 ranked ideas, 6 ideas flagged as needing non-free data, and the $100 instrument feasibility table.
-- Next, after you pick: pre-register with cumulative N = 92 + new trials, run Phases 4–6 unchanged, then Phase 10 signal-only alerts.
+- Pre-registered (commit a696506) before any backtest: V093–V118 = I01 (6), I03 (6), I04 (6), I05 (4), I06 (4). Cumulative N for the DSR = 92 + 26 = 118.
+- Universe GLD/SLV/USO (copper dropped, option c); 2x versions UGL/AGQ/UCO; AGQ/UCO synthetic before Dec 2008, calibrated on in-sample overlap only.
+- Benchmarks (not trials): buy-and-hold of each, SPY, equal weight GLD/SLV/USO (K1's equal weight), 70/30 SPY/GLD.
+- Best DSR at N = 118: 0.430 (V108, I04 dual momentum 6-month, leveraged; uses oil). Best validation Sharpe 0.63, vs 0.82 for 70/30 SPY/GLD.
+- Reports: `reports/commodities_phase4_in_sample.md`, `reports/commodities_phase5_validation.md`, `reports/commodities_kill_table.md`. Runner: `tools/run_commodities.py`.
+
+### Commodity study research (Phase 9)
+- 153 sources found, 114 kept: `research/sources_commodities.csv`, `research/IDEA_POOL_COMMODITIES.md`, `reports/data_quality_commodities.md`.
 
 ### Earlier ETF study (closed)
 Final report: `reports/FINAL_REPORT.md`.
@@ -35,6 +39,8 @@ The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It ha
 3. **Phase 5 report:** it said rotation groups had "no choice to make" in walk-forward. False; fixed (no numbers changed).
 4. **Informational Monte Carlo:** the plain-English lines first misused the median time as a horizon. Rewritten with 3- and 10-year horizons.
 5. **Phase 2 data report and an earlier PROGRESS note:** they said the calibrated synthetic series were "0.7–1.5 pp a year too optimistic" in 2019–2023. That was wrong for TMF, which was 0.7 pp too pessimistic. Both reports now generate this sentence from the data.
+7. **Commodity pre-registration:** I first wrote the EWMAC(16,64) forecast scalar as 1.95; Carver's published value is 3.75 (1.95 is close to the 64/256 rule's). Corrected before the freeze commit and before any backtest; the published value was used, not one fitted to data.
+8. **Commodity Phase 5 report:** the parameter column first showed "fast=20" for I05 instead of the slow window; fixed with a report-only rebuild (no rerun, no duplicate log rows).
 6. Several unit-test expectations I wrote were wrong (hand arithmetic, fill timing). In each case the code was verified against a hand calculation before the test was corrected.
 
 ## If the project is ever resumed
@@ -44,4 +50,4 @@ The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It ha
 
 ## Notes
 - `data/` and `results/` are not committed. Hashes are in `data/raw/download_meta.json` and `data/clean/build_meta.json`.
-- 57 tests pass. `research_log.csv` has 764 rows.
+- 63 tests pass (`pytest tests`). `research_log.csv` rows: see `wc -l`; commodity rows are phases 9-freeze, 9-4-in-sample, 9-5-*, 9-6-kill.
