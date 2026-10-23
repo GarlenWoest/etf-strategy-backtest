@@ -119,7 +119,7 @@ def test_signals_come_from_unleveraged_closes_only():
 
 def test_registry_matches_preregistered_research_log():
     with open(PROJECT_ROOT / "research_log.csv", newline="") as fh:
-        reg = [r for r in csv.DictReader(fh) if r["result"] == "PRE-REGISTERED"]
+        reg = [r for r in csv.DictReader(fh) if r["result"] == "PRE-REGISTERED" and r["phase"] == "0.5-freeze"]
     vs = S.build_variants(rand_closes(300))
     assert len(vs) == len(reg) == CFG["strategies"]["total_trials"] == 92
     for v, r in zip(vs, reg):

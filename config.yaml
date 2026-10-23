@@ -125,3 +125,29 @@ strategies:                         # FROZEN 2026-10-22. 92 trials; pre-register
   P1_vol_gated_leverage:  {sma_days: 200, vol_window_days: 20, vol_threshold: [0.15, 0.20, 0.25], pairs: [[SPY, UPRO], [QQQ, TQQQ]]}  # 6
   P2_multi_asset_trend:   {sma_months: [6, 8, 10, 12], weight_each: 0.25, rebalance: monthly, leveraged_versions: true}  # 8
   P3_rsi2_trend_filter:   {entry_rsi_below: [5, 10, 15], trend_filter_sma_days: 200, exit: close_above_sma5, instruments: [SPY, QQQ], leveraged_versions: true}  # 12
+
+commodity_study:                    # Phase 9+ (user decisions 2026-10-22). FROZEN at pre-registration; V093-V118
+  frozen: true
+  universe: [GLD, SLV, USO]         # copper dropped (option c); gold instrument = GLD
+  calendar_start: "2006-04-28"      # SLV's first trading day; signals warm up from here
+  evaluation_start: "2007-07-02"    # 14 months after calendar_start (the ETF study used a 13.5-month warm-up); every lookback filled
+  leveraged:
+    AGQ: {underlying: SLV, leverage: 2, expense_ratio: 0.0095, source: "ProShares AGQ page (C080)", note: "2x Bloomberg Silver Subindex (futures); K-1"}
+    UCO: {underlying: USO, leverage: 2, expense_ratio: 0.0140, source: "ProShares UCO (C080), approx 1.4% gross; extra drag calibrated on in-sample overlap", note: "2x Bloomberg WTI Crude Oil Subindex; K-1"}
+  benchmarks: [CB01 GLD, CB02 SLV, CB03 USO, CB04 UGL, CB05 AGQ, CB06 UCO, CB07 SPY, CB08 equal_weight GLD/SLV/USO monthly, CB09 70/30 SPY/GLD monthly]   # not trials
+  k1_equal_weight_benchmark: CB08   # K1 "equal weight" = equal weight of this study's universe (CB08); 70/30 (CB09) reported, not a criterion
+  new_trials: 26
+  cumulative_trials_for_dsr: 118    # 92 (ETF study) + 26
+  dsr_variance: "cross-trial variance of daily validation Sharpe ratios over all 118 trials (92 from results/phase5_metrics.csv)"
+  oil_flag: "USO structure change Apr-2020 (front-month -> multi-month futures; 1:8 reverse split 2020-04-29); flagged on every result that uses oil"
+  fred:
+    DFII10: {release: "H.15, posted 4:15 pm ET each business day with the prior business day's rates", rule: h15_daily, usable_from: "2nd trading day after the observation date"}
+    DTWEXBGS: {release: "H.10, posted weekly (Mondays) for the week ending the prior Friday", rule: h10_weekly, usable_from: "first trading day on or after Friday of the observation week + 5 days (Wednesday)"}
+    vintage: "current FRED vintage; revisions not modelled"
+  trials:
+    I01_tsmom_basket:     {lookback_months: [3, 6, 12], trade: [1x, leveraged], weights: "1/3 each GLD/SLV/USO", signal: "21*L-day return > T-bill return over same days", rebalance: monthly}   # 6: V093-V098
+    I03_vol_scaled_trend: {target_vol: [0.15, 0.20, 0.25], scope: [gold, basket], forecast: "EWMAC(16,64)/(close*std64 of daily returns)*3.75/10 (Carver published scalar), clip [-2,2], long-only", weight: "budget*min(1, f/2*target_vol/rv60)", rebalance: "weekly, 10% no-trade band of budget", leverage: none}   # 6: V099-V104
+    I04_dual_momentum:    {lookback_months: [3, 6, 12], trade: [winner_1x, winner_leveraged], rule: "month-end top 21*L-day return of GLD/SLV/USO, held only if it beats T-bills, else cash"}   # 6: V105-V110
+    I05_real_yield:       {fast_obs: 20, slow_obs: [120, 250], trade: [GLD, UGL], rule: "hold when 20-obs mean DFII10 < slow-obs mean, else cash"}   # 4: V111-V114
+    I06_dollar_trend:     {sma_obs: [100, 200], trade: [GLD, UGL], rule: "hold when DTWEXBGS < its SMA, else cash"}   # 4: V115-V118
+  monthly_for_k4: [I01_tsmom_basket, I04_dual_momentum]

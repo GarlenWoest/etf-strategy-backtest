@@ -58,6 +58,22 @@ def test_frozen_list_matches_config_and_research_log():
     assert _variant_count(s) == s["total_trials"] == 92
     with open(PROJECT_ROOT / "research_log.csv", newline="") as fh:
         rows = list(csv.DictReader(fh))
-    registered = [r["test_id"] for r in rows if r["result"] == "PRE-REGISTERED"]
+    old = [r for r in rows if r["phase"] == "0.5-freeze"]
+    registered = [r["test_id"] for r in old if r["result"] == "PRE-REGISTERED"]
     assert registered == ["V%03d" % i for i in range(1, 93)]
+    assert sum(r["result"] == "BENCHMARK" for r in old) == 9
+
+
+def test_commodity_study_frozen_list():
+    c = cfg["commodity_study"]
+    assert c["frozen"] is True
+    t = c["trials"]
+    n = (len(t["I01_tsmom_basket"]["lookback_months"]) * 2 + len(t["I03_vol_scaled_trend"]["target_vol"]) * 2
+         + len(t["I04_dual_momentum"]["lookback_months"]) * 2 + len(t["I05_real_yield"]["slow_obs"]) * 2
+         + len(t["I06_dollar_trend"]["sma_obs"]) * 2)
+    assert n == c["new_trials"] == 26
+    assert c["cumulative_trials_for_dsr"] == cfg["strategies"]["total_trials"] + 26 == 118
+    with open(PROJECT_ROOT / "research_log.csv", newline="") as fh:
+        rows = [r for r in csv.DictReader(fh) if r["phase"] == "9-freeze"]
+    assert [r["test_id"] for r in rows if r["result"] == "PRE-REGISTERED"] == ["V%03d" % i for i in range(93, 119)]
     assert sum(r["result"] == "BENCHMARK" for r in rows) == 9
