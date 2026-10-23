@@ -19,3 +19,6 @@ live/
 
 # paper trading test (PAPER, FICTIONAL MONEY; exempt from rule 2 for paper/ only; never committed)
 paper/
+
+# private backup git database for paper/, live/, briefs/ (never pushed to this repository)
+.backup.git/

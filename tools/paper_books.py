@@ -180,6 +180,10 @@ def update(p, today):
     tamper = verify_journal(p)
     if tamper:
         notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] Book B journal check FAILED: %s" % tamper)
+    else:
+        notes += record_missed(p, s, datetime.combine(today, datetime.min.time()).replace(hour=16, minute=45, tzinfo=ET)
+                               if today != datetime.now(ET).date() else datetime.now(ET))
+        p.save(s)
     start = date.fromisoformat(s["start"])
     if today < start:
         print("paper books start %s; nothing to do yet" % start)
@@ -329,22 +333,31 @@ def journal(p, raw, now_et):
     s = p.load()
     if verify_journal(p):
         sys.exit("REJECTED: journal check failed: %s" % verify_journal(p))
+    for n in record_missed(p, s, now_et):                    # close out earlier weeks first, so entries stay in order
+        print(n)
+    p.save(s)
     e = json.loads(raw)
     miss = [k for k in REQ if not str(e.get(k, "")).strip()]
     if miss:
         sys.exit("REJECTED: missing fields %s" % miss)
     dd = date.fromisoformat(e["decision_date"])
     if dd.weekday() != 6:
-        sys.exit("REJECTED: decisions are made in the Sunday run only")
+        sys.exit("REJECTED: decision_date must be the Sunday of the decision week")
     if dd > now_et.date():
         sys.exit("REJECTED: decision date is in the future")
+    if now_et.date() > dd + timedelta(days=6):
+        sys.exit("REJECTED: the window for the week of %s closed on %s; that week is recorded MISSED"
+                 % (dd, dd + timedelta(days=6)))
+    if dd < first_decision_sunday(s):
+        sys.exit("REJECTED: the first decision week is %s" % first_decision_sunday(s))
     prior = read_entries(p)
-    if any(date.fromisoformat(x["decision_date"]).isocalendar()[:2] == dd.isocalendar()[:2] for x in prior):
+    if any(x["decision_date"] == dd.isoformat() for x in prior):
         sys.exit("REJECTED: a decision for this week already exists")
     act = e["action"].upper()
-    fill = next_trading_day(dd)
+    fill = fill_after(now_et)                       # never earlier than the moment the entry is written
+    late = now_et.date() > dd
     if fill < date.fromisoformat(s["start"]):
-        sys.exit("REJECTED: books start %s" % s["start"])
+        fill = date.fromisoformat(s["start"])
     bk = s["books"]["B"]
     if act == "BUY":
         if e.get("instrument") not in B_UNIVERSE:
@@ -365,14 +378,7 @@ def journal(p, raw, now_et):
             sys.exit("REJECTED: minimum hold is %d trading days" % MIN_HOLD)
     elif act != "NO_TRADE":
         sys.exit("REJECTED: action must be BUY, SELL or NO_TRADE")
-    s["journal_entries"] += 1
-    e = {**e, "action": act, "entry": s["journal_entries"], "written_at_et": now_et.strftime("%Y-%m-%d %H:%M ET"),
-         "fill_planned": fill.isoformat(), "label": LABEL}
-    with open(p.journal_md, "a") as fh:
-        fh.write("\n## Entry #%d (%s): %s %s\n\n```json\n%s\n```\n" % (e["entry"], e["decision_date"], act,
-                 e.get("instrument", ""), json.dumps(e, sort_keys=True, ensure_ascii=False, indent=1)))
-    p.append_csv(p.hashes, ["entry", "written_at_et", "sha256"], {"entry": e["entry"], "written_at_et": e["written_at_et"],
-                                                                   "sha256": entry_hash(e)})
+    e = append_entry(p, s, {**e, "action": act, "late": late, "fill_planned": fill.isoformat()}, now_et)
     if act == "BUY":
         s["pending"].append({"book": "B", "kind": "b_buy", "instrument": e["instrument"], "size_pct": float(e["size_pct"]),
                              "exit_rule": e["exit_rule"], "fill_date": fill.isoformat(), "entry": e["entry"]})
@@ -380,7 +386,50 @@ def journal(p, raw, now_et):
         s["pending"].append({"book": "B", "kind": "b_sell", "instrument": e["instrument"], "fill_date": fill.isoformat(),
                              "entry": e["entry"]})
     p.save(s)
-    print("ACCEPTED entry #%d: %s %s, fill at the %s open" % (e["entry"], act, e.get("instrument", ""), fill))
+    print("ACCEPTED entry #%d%s: %s %s, fill at the %s open" % (e["entry"], " (LATE)" if late else "", act,
+                                                               e.get("instrument", ""), fill))
+
+
+def append_entry(p, s, e, now_et):
+    """Append one fingerprinted entry (the only way anything is written to the journal)."""
+    s["journal_entries"] += 1
+    e = {**e, "entry": s["journal_entries"], "written_at_et": now_et.strftime("%Y-%m-%d %H:%M ET"), "label": LABEL}
+    tag = " (LATE)" if e.get("late") else ""
+    with open(p.journal_md, "a") as fh:
+        fh.write("\n## Entry #%d (week of %s): %s %s%s\n\n```json\n%s\n```\n" % (
+            e["entry"], e["decision_date"], e["action"], e.get("instrument", ""), tag,
+            json.dumps(e, sort_keys=True, ensure_ascii=False, indent=1)))
+    p.append_csv(p.hashes, ["entry", "written_at_et", "sha256"], {"entry": e["entry"], "written_at_et": e["written_at_et"],
+                                                                   "sha256": entry_hash(e)})
+    return e
+
+
+def first_decision_sunday(s):
+    st = date.fromisoformat(s["start"])
+    return st - timedelta(days=(st.weekday() + 1) % 7)
+
+
+def fill_after(now_et):
+    """First open at or after the moment of writing: today's open if written before 9:30 ET on a trading day."""
+    d = now_et.date()
+    if is_trading_day(d) and (now_et.hour, now_et.minute) < (9, 30):
+        return d
+    return next_trading_day(d)
+
+
+def record_missed(p, s, now_et):
+    """Append a MISSED entry for every decision week whose window (Sunday..Saturday) closed without a decision."""
+    done = {x["decision_date"] for x in read_entries(p)}
+    notes = []
+    d = first_decision_sunday(s)
+    while d + timedelta(days=7) <= now_et.date():
+        if d.isoformat() not in done:
+            append_entry(p, s, {"decision_date": d.isoformat(), "action": "MISSED", "late": False,
+                                "entry_reason": "no decision was written during the week's window (%s to %s)"
+                                % (d, d + timedelta(days=6)), "wrong_if": "n/a", "planned_exit": "n/a"}, now_et)
+            notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] Book B: no decision for the week of %s; recorded MISSED" % d)
+        d += timedelta(days=7)
+    return notes
 
 
 def status(p):

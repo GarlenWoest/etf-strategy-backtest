@@ -40,9 +40,15 @@ def paper(monkeypatch):
     shutil.rmtree(DIR, ignore_errors=True)
 
 
-def J(p, d, **kw):
+def J(p, d, now=None, **kw):
+    """Submit a journal entry; written at 18:00 ET on the decision Sunday unless `now` says otherwise."""
     e = {"decision_date": d, "entry_reason": "r", "wrong_if": "w", "planned_exit": "x", **kw}
-    PB.journal(p, __import__("json").dumps(e), datetime(2026, 12, 31, 18, 0))
+    now = now or datetime.fromisoformat(d + "T18:00").replace(tzinfo=PB.ET)
+    PB.journal(p, __import__("json").dumps(e), now)
+
+
+def at(s):
+    return datetime.fromisoformat(s).replace(tzinfo=PB.ET)
 
 
 def test_fills_costs_and_mark_to_market(paper):
@@ -99,3 +105,50 @@ def test_journal_tamper_detected(paper):
 def test_min_hold_counter():
     assert PB.trading_days_between(date(2026, 10, 26), date(2026, 11, 2)) == 5
     assert PB.trading_days_between(date(2026, 11, 25), date(2026, 11, 30)) == 2   # Thanksgiving 11-26 closed
+
+
+# ---------------------------------------------------------------- late Sundays and MISSED weeks
+
+def test_late_monday_before_open_fills_same_day(paper):
+    J(paper, "2026-11-01", now=at("2026-11-02T08:15"), action="NO_TRADE")
+    e = PB.read_entries(paper)[-1]
+    assert e["decision_date"] == "2026-11-01" and e["late"] is True and e["fill_planned"] == "2026-11-02"
+
+
+def test_late_monday_after_open_fills_next_day_never_earlier(paper):
+    J(paper, "2026-11-01", now=at("2026-11-02T10:05"), action="BUY", instrument="GLD", size_pct=20,
+      exit_rule={"stop_below": 1})
+    e = PB.read_entries(paper)[-1]
+    assert e["late"] is True and e["fill_planned"] == "2026-11-03"   # Monday's open had passed
+    assert e["fill_planned"] > e["written_at_et"][:10] or e["written_at_et"][11:16] < "09:30"
+    pend = [o for o in paper.load()["pending"] if o["book"] == "B"]
+    assert pend[0]["fill_date"] == "2026-11-03"
+
+
+def test_on_time_sunday_is_not_late(paper):
+    J(paper, "2026-10-25", action="NO_TRADE")
+    e = PB.read_entries(paper)[-1]
+    assert e["late"] is False and e["fill_planned"] == "2026-10-26"
+
+
+def test_window_closes_after_saturday_and_week_is_missed_once(paper):
+    with pytest.raises(SystemExit, match="MISSED"):
+        J(paper, "2026-10-25", now=at("2026-11-01T18:00"), action="NO_TRADE")
+    PB.update(paper, date(2026, 11, 2))
+    PB.update(paper, date(2026, 11, 3))                         # second run must not record it again
+    missed = [e for e in PB.read_entries(paper) if e["action"] == "MISSED"]
+    assert [m["decision_date"] for m in missed] == ["2026-10-25"]
+    assert PB.verify_journal(paper) is None
+    J(paper, "2026-11-01", now=at("2026-11-04T12:00"), action="NO_TRADE")   # late but inside its own week
+    with pytest.raises(SystemExit, match="already exists"):
+        J(paper, "2026-11-01", now=at("2026-11-05T12:00"), action="NO_TRADE")
+    nums = [e["entry"] for e in PB.read_entries(paper)]
+    assert nums == list(range(1, len(nums) + 1))                # numbering stays consecutive
+
+
+def test_journal_command_records_missed_weeks_first(paper):
+    J(paper, "2026-11-08", now=at("2026-11-08T18:00"), action="NO_TRADE")   # weeks of 10-25 and 11-01 were skipped
+    ent = PB.read_entries(paper)
+    assert [(e["decision_date"], e["action"]) for e in ent] == [("2026-10-25", "MISSED"), ("2026-11-01", "MISSED"),
+                                                                 ("2026-11-08", "NO_TRADE")]
+    assert PB.verify_journal(paper) is None

@@ -9,6 +9,10 @@ _Last updated: 2026-10-23 (project closed)_
 - **Weekly market brief:** Sundays 6 PM ET → `briefs/` (git-ignored). Informational only.
 - **Watchlist alerts:** weekdays 4:45 PM ET → `live/` (git-ignored). V122 (VTI/IEF/DBC/GLD stand-ins) and V074, both labelled NOT VALIDATED, FAILED TESTING; signals only.
 - **Paper trading test (PAPER, FICTIONAL MONEY):** `paper/` (git-ignored). Four $100 books from 2026-10-26: A rules (V122 + V074), B discretionary (one journalled decision per week, fingerprinted, 5-day hold), SPY and 70/30 SPY/GLD benchmarks. 2-week checkpoint report, and no conclusion before 3 months.
+- **Fixes (2026-10-23):**
+  - late Sunday runs: Book B entries are dated to the Sunday, marked LATE, and filled at the first open after writing; weeks with no decision are recorded MISSED;
+  - heartbeat in `live/heartbeat.json`: Sunday status line, plus a gap alert after more than 3 trading days without a run;
+  - private backup of paper/, live/ and briefs/ via `.backup.git` (allowlist-checked). The user creates the private repo and token.
 - None of these place orders or connect a broker, and nothing from them enters `data/`, `research_log.csv` or any study.
 
 ### Study 3 (long-history validation, 1927–2018)
@@ -68,4 +72,4 @@ The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It ha
 
 ## Notes
 - `data/` and `results/` are not committed. Hashes are in `data/raw/download_meta.json` and `data/clean/build_meta.json`.
-- 76 tests pass (`pytest tests`). `research_log.csv` rows: see `wc -l`; commodity rows are phases 9-freeze, 9-4-in-sample, 9-5-*, 9-6-kill.
+- 90 tests pass (`pytest tests`). `research_log.csv` rows: see `wc -l`; commodity rows are phases 9-freeze, 9-4-in-sample, 9-5-*, 9-6-kill.
