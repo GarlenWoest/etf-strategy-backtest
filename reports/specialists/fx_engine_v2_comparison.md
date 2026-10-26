@@ -39,7 +39,7 @@ _Run 2026-10-26T16:20:02Z. Engine v2: `fx_engine_v2 1.0 (2026-10-26)`. **Diagnos
 
 ## Notes
 
-- v2 settings: re-size to the target at every weekly decision (band 0), cap 1x at every close, same costs (0.015% one-way, 0.75%/yr rollover markup), same lag (1 FX day), same data and rates (DTB3, JGB 1Y proxy).
+- v2 settings (this run; not the later defaults): re-size to the target at every weekly decision (band 0), strict cap 1x at every close (cap_tolerance 0), same costs (0.015% one-way, 0.75%/yr rollover markup), same lag (1 FX day), same data and rates (DTB3, JGB 1Y proxy).
 - A re-size or cap trim pays costs on the traded amount; v2's higher trade count is mostly small re-sizes.
 - v2's daily P&L differs from v1 even with identical exposure because v1 re-sizes the yen leg every day for free (D3); over one day after entry the two engines agree (unit test).
 - Criteria lists are applied mechanically for this diagnostic only; they are not new verdicts.

@@ -69,7 +69,7 @@ def run(engine, tg, m):
         true_changes = int((tr["from"] != tr["to"]).sum())
         kinds = {"all trades": counted}
     else:
-        r = run_balance(d["spot"], d["tbill"], d["jp1"], tg, COST * m, MARKUP * m, 10000, max_x=1.0, lag=1, band=0.0,
+        r = run_balance(d["spot"], d["tbill"], d["jp1"], tg, COST * m, MARKUP * m, 10000, max_x=1.0, lag=1, band=0.0, cap_tolerance=0.0,
                         invert=True, start=IS0, end=END)
         expo = r.exposure_x
         hold = holding_days(r)
@@ -174,7 +174,7 @@ for t in tids + ["UB02"]:
         t, a["k4_count"], a["true_changes"], kb["open"] + kb["close"] + kb["reverse"], kb["resize"], kb["cap_trim"],
         a["costs_usd"], b["costs_usd"], a["max_abs_expo"], b["max_abs_expo"]))
 L += ["\n## Notes\n",
-      "- v2 settings: re-size to the target at every weekly decision (band 0), cap 1x at every close, same costs "
+      "- v2 settings (this run; not the later defaults): re-size to the target at every weekly decision (band 0), strict cap 1x at every close (cap_tolerance 0), same costs "
       "(0.015% one-way, 0.75%/yr rollover markup), same lag (1 FX day), same data and rates (DTB3, JGB 1Y proxy).",
       "- A re-size or cap trim pays costs on the traded amount; v2's higher trade count is mostly small re-sizes.",
       "- v2's daily P&L differs from v1 even with identical exposure because v1 re-sizes the yen leg every day for free "

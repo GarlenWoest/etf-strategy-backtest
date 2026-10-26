@@ -184,3 +184,36 @@ def test_update_after_refusal_catches_up(paper, monkeypatch):
     monkeypatch.setattr(PB, "now_et", lambda: datetime(2026, 10, 27, 16, 45, tzinfo=PB.ET))
     PB.update(paper, date(2026, 10, 27))
     assert list(paper.read_csv(paper.values)["date"]) == ["2026-10-26", "2026-10-27"]
+
+
+def test_no_bar_for_today_alerts_instead_of_silent_ok(paper, monkeypatch):
+    """Fix P1: a trading day with no bar yet gives a notification (it used to do nothing and stay silent)."""
+    monkeypatch.setattr(PB, "download", lambda t, s: fake(t, s).loc[:"2026-10-27"])
+    notes = PB.update(paper, date(2026, 10, 28))
+    assert any("no daily bar for 2026-10-28" in n for n in notes)
+    assert paper.load()["last_update"] == "2026-10-27"
+
+
+def test_missing_open_defers_order_and_missing_close_uses_last_close(paper, monkeypatch):
+    """Fix P2: one missing price no longer fails the whole update."""
+    def gappy(t, s):
+        df = fake(t, s)
+        df.loc[pd.Timestamp("2026-10-26"), ("Open", "GLD")] = np.nan        # no GLD open on the start day
+        df.loc[pd.Timestamp("2026-10-28"), ("Close", "VTI")] = np.nan       # no VTI close (held by Book A) two days later
+        return df
+    monkeypatch.setattr(PB, "download", gappy)
+    J(paper, "2026-10-25", action="BUY", instrument="GLD", size_pct=50, exit_rule={"exit_on_or_after": "2026-11-06"})
+    notes = PB.update(paper, date(2026, 10, 26))
+    assert any("deferred: no open price for GLD on 2026-10-26" in n for n in notes)
+    s = paper.load()
+    assert {o["book"] for o in s["pending"]} == {"MIX", "B"}             # GLD orders wait; SPY and Book A filled
+    assert "SPY" in s["books"]["SPY"]["shares"]
+    notes = PB.update(paper, date(2026, 10, 27))
+    assert any("filled late on 2026-10-27" in n for n in notes) and not paper.load()["pending"]
+    notes = PB.update(paper, date(2026, 10, 28))
+    assert any("no close for VTI on 2026-10-28" in n for n in notes)
+    v = paper.read_csv(paper.values)
+    assert list(v["date"]) == ["2026-10-26", "2026-10-27", "2026-10-28"]
+    px, a = fake(None, None)["Close"], paper.load()["books"]["A"]["V122"]
+    assert abs(v["A_V122"].iloc[-1] - (a["cash"] + a["shares"]["VTI"] * px.loc["2026-10-27", "VTI"]
+                                       + a["shares"]["DBC"] * px.loc["2026-10-28", "DBC"])) < 1e-4     # values.csv keeps 4 decimals

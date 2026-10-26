@@ -183,6 +183,10 @@ specialists:                        # Expansion (user decisions 2026-10-23); see
   holiday_calendars: rule_based     # no new dependency
   publication: "new code and the source library (citations plus our own summaries) may be public; data/, live/, paper/, briefs/ stay private"
   data_policy: "daily data only for now; Dukascopy, HistData, TrueFX and World Gold Council only if a pre-registered hypothesis needs them"
+  engine_v2:                        # src/fx_engine_v2.py, FUTURE experiments only (v1 stays the engine of record for V135-V142)
+    band: 0.10                      # user-approved 2026-10-26: re-size at a decision only if exposure is > 10% of equity off target
+    cap_tolerance: 0.05             # user-approved 2026-10-26: trim only above 1.05 x max_gross_notional_x, back to exactly max
+    fixed_before_preregistration: true   # any new pre-registration uses these values unless the user changes them first
   ledgers:
     gold:   {virtual_usd: 100,   max_gross_notional_x: 1.0, vehicle: GLD}
     usdjpy: {virtual_usd: 10000, max_gross_notional_x: 1.0, report: ["percent", "per_100_usd"]}

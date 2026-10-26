@@ -217,6 +217,10 @@ def update(p, today):
     D = df["Dividends"] if "Dividends" in df.columns.get_level_values(0) else None
     irx = C["^IRX"].ffill()
     days = [d.date() for d in C.index if start <= d.date() <= today and is_trading_day(d.date())]
+    if is_trading_day(today) and today >= start and pd.Timestamp(today) not in C.index:      # fix P1 (approved 10-26)
+        notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] no daily bar for %s yet; values not updated for that day; "
+                     "the next run catches up" % today)
+    Cf = C.ffill()
     last = date.fromisoformat(s["last_update"]) if s["last_update"] else None
     trade_log = []
     for d in days:
@@ -241,6 +245,11 @@ def update(p, today):
         opens = {t: float(O.loc[ts, t]) for t in need if not np.isnan(O.loc[ts, t])}
         day_fills = {}
         for order in [o for o in s["pending"] if o["fill_date"] <= d.isoformat()]:
+            missing = sorted(t for t in order_instruments(s, order) if t not in opens)          # fix P2 (approved 10-26)
+            if missing:
+                notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] order for %s deferred: no open price for %s on %s; "
+                             "it stays pending for the next open" % (order["book"], ", ".join(missing), d))
+                continue
             s["pending"].remove(order)
             late = order["fill_date"] < d.isoformat()
             if order["kind"] == "rebalance_live":
@@ -278,7 +287,11 @@ def update(p, today):
             if f:
                 notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] Book %s trades at the %s open: %s" % (
                     book, d, ", ".join("%s %s @ %.2f" % (sd, t, px) for sd, t, q, px in f)))
-        closes = {t: float(C.loc[ts, t]) for t in need if not np.isnan(C.loc[ts, t])}
+        closes = {t: float(Cf.loc[ts, t]) for t in need if not np.isnan(Cf.loc[ts, t])}    # last close if today's is missing
+        stale = sorted(t for t in held_instruments(s) if np.isnan(C.loc[ts, t]))
+        if stale:
+            notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] no close for %s on %s; valued at the last available close"
+                         % (", ".join(stale), d))
         vals = {"A": value_of(s["books"]["A"]["V122"], closes) + value_of(s["books"]["A"]["V074"], closes),
                 "A_V122": value_of(s["books"]["A"]["V122"], closes), "A_V074": value_of(s["books"]["A"]["V074"], closes),
                 "B": value_of(s["books"]["B"], closes), "SPY": value_of(s["books"]["SPY"], closes),
@@ -298,7 +311,7 @@ def update(p, today):
         bk = s["books"]["B"]
         for t, m in list(bk["meta"].items()):                       # planned exits, only after the minimum hold
             held = trading_days_between(date.fromisoformat(m["fill_date"]), date.fromisoformat(nxt))
-            if held < MIN_HOLD or any(o["kind"] == "b_sell" and o["instrument"] == t for o in s["pending"]):
+            if held < MIN_HOLD or t in stale or any(o["kind"] == "b_sell" and o["instrument"] == t for o in s["pending"]):
                 continue
             r = m.get("exit_rule", {})
             hit = (r.get("stop_below") and closes[t] < r["stop_below"]) or \
@@ -313,6 +326,21 @@ def update(p, today):
     p.save(s)
     notes += checkpoints(p, s, today)
     return notes
+
+
+def order_instruments(s, order):
+    """Instruments whose open price an order needs (its book's holdings plus its targets)."""
+    if order["kind"] == "rebalance_live":
+        _, tg = live_targets()
+        return set().union(*(set(s["books"]["A"][sid]["shares"]) | set(tg[sid]) for sid in ("V122", "V074")))
+    if order["kind"] == "target":
+        return set(s["books"][order["book"]]["shares"]) | set(order["weights"])
+    return set(s["books"]["B"]["shares"]) | {order["instrument"]}
+
+
+def held_instruments(s):
+    b = s["books"]
+    return set().union(*(set(x["shares"]) for x in (b["A"]["V122"], b["A"]["V074"], b["B"], b["SPY"], b["MIX"])))
 
 
 def trading_days_between(a, b):

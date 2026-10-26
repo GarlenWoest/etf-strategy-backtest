@@ -30,8 +30,10 @@ Goal: fix the research infrastructure before any new hypothesis. There are 7 pri
   - P2: one missing price fails the whole update;
   - P3–P5: documented only.
   - P1 and P2 need your approval.
-- **Open decisions:** cap_tolerance and band values for future pre-registrations; the P1 and P2 fixes.
-- **Tests:** 143 pass. The memory ledger has 41 records, chain intact.
+- **Decided 2026-10-26 (user):**
+  - engine v2 defaults are band 0.10 and cap_tolerance 0.05, fixed before any new pre-registration (`config.yaml specialists.engine_v2`);
+  - the paper-script fixes P1 and P2 are implemented with tests.
+- **Tests:** 146 pass. The memory ledger has 44 records, chain intact.
 - **Today's scheduled run executed and was verified:**
   - 16:49:01–16:49:15 ET, status ok;
   - all 4 opening orders filled, and the fill prices match a fresh Yahoo download;

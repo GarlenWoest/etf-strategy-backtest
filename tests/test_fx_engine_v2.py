@@ -5,7 +5,16 @@ import pandas as pd
 import pytest
 
 from src.fx_engine import run_fx
-from src.fx_engine_v2 import holding_days, position_changes, run_balance, trade_counts
+from src import load_config
+from src.fx_engine_v2 import DEFAULT_BAND, DEFAULT_CAP_TOLERANCE, holding_days, position_changes, trade_counts
+from src.fx_engine_v2 import run_balance as _run_balance
+
+
+def run_balance(*a, **k):
+    """The mechanics tests below switch both tolerances off unless they set them; the defaults are tested separately."""
+    k.setdefault("band", 0.0)
+    k.setdefault("cap_tolerance", 0.0)
+    return _run_balance(*a, **k)
 
 IDX = pd.bdate_range("2010-01-04", periods=30)
 
@@ -157,3 +166,12 @@ def test_cap_tolerance_reduces_trims_and_bounds_exposure():
     loose = run_balance(s, zero(), zero(), decide(d0=1.0), 0.001, 0.0, 10000, invert=True, cap_tolerance=0.05)
     assert trade_counts(loose)["cap_trim"] < trade_counts(strict)["cap_trim"]
     assert (loose.exposure_x.abs() <= 1.05 + 1e-12).all() and loose.exposure_x.abs().max() > 1.0
+
+
+def test_approved_defaults_match_config_and_apply():
+    c = load_config()["specialists"]["engine_v2"]
+    assert (DEFAULT_BAND, DEFAULT_CAP_TOLERANCE) == (c["band"], c["cap_tolerance"]) == (0.10, 0.05)
+    s = series(np.linspace(100, 70, 30))
+    r = _run_balance(s, zero(), zero(), decide(d0=1.0), 0.001, 0.0, 10000, invert=True)
+    assert r.meta["band"] == 0.10 and r.meta["cap_tolerance"] == 0.05
+    assert (r.exposure_x.abs() <= 1.05 + 1e-12).all()

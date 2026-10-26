@@ -33,7 +33,10 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-ENGINE_VERSION = "fx_engine_v2 1.0 (2026-10-26)"
+ENGINE_VERSION = "fx_engine_v2 1.1 (2026-10-26)"
+# Defaults approved by the user 2026-10-26, fixed before any new pre-registration (config.yaml specialists.engine_v2):
+DEFAULT_BAND = 0.10            # re-size at a decision only if the exposure is > 10% of equity off target
+DEFAULT_CAP_TOLERANCE = 0.05   # trim only above 1.05 x max_x, back to exactly max_x
 CHANGE_KINDS = ("open", "close", "reverse")
 
 
@@ -49,14 +52,14 @@ class BalanceResult:
 
 
 def run_balance(price, r_usd, r_asset, target, cost_one_way, markup_annual, start_equity, max_x=1.0, lag=1,
-                band=0.0, cap_tolerance=0.0, basis_usd=360, basis_asset=365, invert=False, start=None, end=None):
+                band=DEFAULT_BAND, cap_tolerance=DEFAULT_CAP_TOLERANCE, basis_usd=360, basis_asset=365, invert=False, start=None, end=None):
     """price: USD price of one asset unit (or the pair quote if invert=True, e.g. USD/JPY yen per USD); r_usd, r_asset:
     annual decimals already lagged to what was known on each date; target: Series of signed exposure fractions in the
     pair's direction decided on each date (NaN = no decision). invert=True means the pair is USD/XXX (the asset is
     the quote currency): P = 1/price and a long pair position is a short asset balance.
     band: on a decision day with an unchanged direction, re-size only if |exposure_x - target| > band.
     cap_tolerance: trim only when |exposure| > max_x x (1 + cap_tolerance) x equity, back to exactly max_x; 0 = a strict
-    cap at every close (many tiny trims). Both are parameters to fix in a pre-registration."""
+    cap at every close (many tiny trims). Defaults: DEFAULT_BAND and DEFAULT_CAP_TOLERANCE (user-approved)."""
     idx = price.index
     if start is not None:
         idx = idx[idx >= pd.Timestamp(start)]
