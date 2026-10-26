@@ -32,6 +32,7 @@ def fake(tickers, start):
 def paper(monkeypatch):
     shutil.rmtree(DIR, ignore_errors=True)
     monkeypatch.setattr(PB, "download", fake)
+    monkeypatch.setattr(PB, "now_et", lambda: datetime(2026, 12, 31, 18, 0, tzinfo=PB.ET))   # after hours: updates allowed
     monkeypatch.setattr(PB, "live_targets", lambda: ("2026-09-30", {"V122": {"VTI": 0.25, "DBC": 0.25},
                                                                     "V074": {"UPRO": 0.25, "TQQQ": 0.25}}))
     p = PB.Paper(DIR)
@@ -152,3 +153,34 @@ def test_journal_command_records_missed_weeks_first(paper):
     assert [(e["decision_date"], e["action"]) for e in ent] == [("2026-10-25", "MISSED"), ("2026-11-01", "MISSED"),
                                                                  ("2026-11-08", "NO_TRADE")]
     assert PB.verify_journal(paper) is None
+
+
+# ---------------------------------------------------------------- market-hours guard
+
+def test_update_refused_during_market_hours_and_logged(paper, monkeypatch):
+    before = paper.state_p.read_text()
+    monkeypatch.setattr(PB, "now_et", lambda: datetime(2026, 10, 26, 11, 55, tzinfo=PB.ET))   # Monday, market open
+    assert PB.update(paper, START) == []
+    assert paper.state_p.read_text() == before                          # nothing changed
+    assert not paper.values.exists()
+    log = paper.read_csv(paper.dir / "update_refusals.csv")
+    assert len(log) == 1 and "09:30-16:15" in log["reason"].iloc[0]
+
+
+def test_market_hours_window_edges():
+    at = lambda *a: datetime(*a, tzinfo=PB.ET)
+    assert PB.market_hours_refusal(at(2026, 10, 26, 9, 29)) is None
+    assert PB.market_hours_refusal(at(2026, 10, 26, 9, 30)) is not None
+    assert PB.market_hours_refusal(at(2026, 10, 26, 16, 14)) is not None
+    assert PB.market_hours_refusal(at(2026, 10, 26, 16, 15)) is None
+    assert PB.market_hours_refusal(at(2026, 10, 31, 12, 0)) is None      # Saturday
+    assert PB.market_hours_refusal(at(2026, 11, 26, 12, 0)) is None      # Thanksgiving: NYSE closed
+
+
+def test_update_after_refusal_catches_up(paper, monkeypatch):
+    J(paper, "2026-10-25", action="NO_TRADE")
+    monkeypatch.setattr(PB, "now_et", lambda: datetime(2026, 10, 27, 10, 0, tzinfo=PB.ET))
+    PB.update(paper, date(2026, 10, 27))
+    monkeypatch.setattr(PB, "now_et", lambda: datetime(2026, 10, 27, 16, 45, tzinfo=PB.ET))
+    PB.update(paper, date(2026, 10, 27))
+    assert list(paper.read_csv(paper.values)["date"]) == ["2026-10-26", "2026-10-27"]

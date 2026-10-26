@@ -5,6 +5,7 @@ User decisions 2026-10-23:
   - the Sunday brief starts with a status line for the week just ended: last successful weekday run, weekday runs vs the
     week's actual NYSE trading days, missed and late runs, errors;
   - "late" = a weekday run that started after 18:00 ET, or that ran on a later day (catch-up);
+  - days before MONITORING_START (2026-10-22, when the weekday task was created) are not expected and never "missed";
   - the weekday run notifies once if the last successful weekday run was more than 3 trading days ago (no repeat until
     runs are normal again).
 
@@ -27,6 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ET = ZoneInfo("America/New_York")
 KEEP = 120
 GAP_TRADING_DAYS = 3
+MONITORING_START = date(2026, 10, 22)      # weekday task created 2026-10-22; earlier days were never expected to run
 
 
 def load(path):
@@ -99,7 +101,8 @@ def week_status(path, now):
     hb = load(path)
     sunday = now.date() - timedelta(days=(now.date().weekday() + 1) % 7)
     mon = sunday - timedelta(days=6)
-    days = [mon + timedelta(days=i) for i in range(5) if is_trading_day(mon + timedelta(days=i))]
+    days = [mon + timedelta(days=i) for i in range(5)
+            if is_trading_day(mon + timedelta(days=i)) and mon + timedelta(days=i) >= MONITORING_START]
     wk = [r for r in hb["runs"] if r["kind"] == "weekday" and r["started"]]
     by_day = {}
     for r in wk:
@@ -123,8 +126,9 @@ def week_status(path, now):
                 continue                                         # the run printing this line
             errors.append("%s %s: %s" % (r["kind"], st[:16].replace("T", " "), r["note"] or "did not finish"))
     last = last_ok_weekday(hb)
-    return ("Status: last successful weekday run %s; weekday runs this week %d of %d trading days; missed: %s; late: %s; "
-            "errors: %s." % (last.strftime("%a %m-%d %H:%M ET") if last else "none yet", len(ok_days), len(days),
+    pre = "" if mon >= MONITORING_START else " (monitoring started %s; earlier days not expected)" % MONITORING_START
+    return ("Status: last successful weekday run %s; weekday runs this week %d of %d trading days%s; missed: %s; late: %s; "
+            "errors: %s." % (last.strftime("%a %m-%d %H:%M ET") if last else "none yet", len(ok_days), len(days), pre,
                              ", ".join(missed) or "none", ", ".join(late) or "none", "; ".join(errors) or "none"))
 
 

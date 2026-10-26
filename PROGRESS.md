@@ -12,6 +12,10 @@ _Last updated: 2026-10-26 (research paused after 0/142; paper books and monitori
   - The private backup failed, because the repo and token don't exist yet.
   - The paper books process the 10-26 open in today's 16:45 ET weekday run.
 
+- **Monitoring fixes (2026-10-26, approved):**
+  - The heartbeat has a monitoring start date (2026-10-22): earlier days are never reported as missed.
+  - `paper_books.py update` refuses to run 09:30–16:15 ET on NYSE trading days, logs the reason to `paper/update_refusals.csv`, and changes nothing. The next run after 16:15 catches up.
+
 ### USD/JPY study 1 (2026-10-26)
 **0 of 8 survive. Best Deflated Sharpe 0.37 at N = 142 (V142). Always-long validation Sharpe 0.24.** Report: `reports/specialists/usdjpy/study1_kill_table.md`. Results, rejections and one error (sizing ratchet, not corrected) are in `research/memory/research.jsonl`. Stopped, per instruction.
 

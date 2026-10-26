@@ -72,3 +72,18 @@ def test_unfinished_run_counts_as_error():
     line = HB.week_status(F, at("2026-11-08T18:00"))
     assert "did not finish" in line
     assert "Tue (caught up Wed 11-04)" in line                      # an unfinished run does not count as a run
+
+
+def test_days_before_monitoring_start_are_not_missed():
+    # week of Mon 2026-10-19; monitoring started Thu 2026-10-22; the first weekday run was Fri 10-23
+    run("2026-10-23T16:55")
+    line = HB.week_status(F, at("2026-10-25T18:35"))
+    assert "1 of 2 trading days (monitoring started 2026-10-22" in line
+    assert "Mon" not in line.split("missed:")[1].split(";")[0] and "Tue" not in line and "Wed" not in line
+    assert "missed: Thu" in line                                       # 10-22 itself is inside the monitoring period
+
+
+def test_full_weeks_after_start_unchanged():
+    for d in ("02", "03", "04", "05", "06"):
+        run("2026-11-%sT16:50" % d)
+    assert "5 of 5 trading days; missed: none" in HB.week_status(F, at("2026-11-08T18:00"))

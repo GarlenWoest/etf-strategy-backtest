@@ -174,7 +174,30 @@ def live_targets():
     return st["last_month_end"], st["targets"]
 
 
+MARKET_LOCK = ((9, 30), (16, 15))          # ET; Yahoo's "close" is an intraday price inside this window
+
+
+def now_et():
+    return datetime.now(ET)
+
+
+def market_hours_refusal(now):
+    """Reason to refuse an update at `now` (ET), or None. Inside 09:30-16:15 ET on a trading day the latest bar's
+    close is still an intraday price, so marking to market would use a price that is not a close."""
+    t = (now.hour, now.minute)
+    if is_trading_day(now.date()) and MARKET_LOCK[0] <= t < MARKET_LOCK[1]:
+        return "update refused at %s: inside 09:30-16:15 ET on a trading day (today's close is not final yet)" % (
+            now.strftime("%Y-%m-%d %H:%M ET"))
+    return None
+
+
 def update(p, today):
+    refusal = market_hours_refusal(now_et())
+    if refusal:
+        p.append_csv(p.dir / "update_refusals.csv", ["logged_at_et", "reason"],
+                     {"logged_at_et": now_et().strftime("%Y-%m-%d %H:%M ET"), "reason": refusal})
+        print("REFUSED: " + refusal + "; nothing was changed. The next run after 16:15 ET catches up.")
+        return []
     s = p.load()
     notes = []
     tamper = verify_journal(p)
