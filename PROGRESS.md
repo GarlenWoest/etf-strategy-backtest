@@ -1,6 +1,6 @@
 # PROGRESS
 
-_Last updated: 2026-10-26 (research-quality phase, Priority 1 of 7 done; research pause for strategies still active)_
+_Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done; research pause for strategies still active)_
 
 ## Current phase
 ### Research-quality phase (user instruction 2026-10-26)
@@ -12,7 +12,17 @@ Goal: fix the research infrastructure before any new hypothesis. There are 7 pri
   - research paused for strategies;
   - no installs or downloads of large datasets or paid services without approval.
 
-**Priority 1, infrastructure audit and FX engine fixes: DONE, awaiting approval.** Report: `reports/infrastructure_audit.md`.
+**Priority 2, data-vendor research: DONE (research only), awaiting approval.** Report: `reports/data_vendor_comparison.md`.
+- Nothing was downloaded, bought or registered.
+- **Sources reviewed:** Dukascopy, HistData, TrueFX, FXCM, OANDA, FirstRate, Databento/CME, EBS, LSEG, Bloomberg, LBMA/IBA, and macro sources (FRED/ALFRED, official calendars, OECD revisions database, BoE, FXMacroData, Trading Economics).
+- **Verdict:** no free source shows executable costs. For session patterns, two agreeing free sources should suffice.
+  - Proposed: HistData plus TrueFX for USD/JPY and GBP/USD; HistData XAU/USD plus Databento GC within the $125 free credits for gold.
+  - Dukascopy needs a written OK (its terms forbid building a database). LBMA history needs a licence.
+  - There's no free source of historical consensus forecasts.
+- **Quality tests Q1–Q9** are defined. Acquisition steps A0–A5 each need approval; the first is a one-year HistData USD/JPY pilot (2019).
+- **Next priority (3)** waits for approval.
+
+**Priority 1, infrastructure audit and FX engine fixes: DONE, approved 2026-10-26.** Report: `reports/infrastructure_audit.md`.
 - **Engine v2:**
   - `src/fx_engine_v2.py` holds currency balances and is for future experiments only; v1 is unchanged and remains the engine of record for V135–V142.
   - It fixes the D1 sizing ratchet, D2 K4 counting, D3 v1's implicit daily re-sizing of the yen leg, and two negligible issues (D4, D5).
@@ -33,7 +43,7 @@ Goal: fix the research infrastructure before any new hypothesis. There are 7 pri
 - **Decided 2026-10-26 (user):**
   - engine v2 defaults are band 0.10 and cap_tolerance 0.05, fixed before any new pre-registration (`config.yaml specialists.engine_v2`);
   - the paper-script fixes P1 and P2 are implemented with tests.
-- **Tests:** 146 pass. The memory ledger has 44 records, chain intact.
+- **Tests:** 146 pass. The memory ledger has 45 records, chain intact.
 - **Today's scheduled run executed and was verified:**
   - 16:49:01–16:49:15 ET, status ok;
   - all 4 opening orders filled, and the fill prices match a fresh Yahoo download;
