@@ -5,7 +5,7 @@ User decisions 2026-10-23:
   - the Sunday brief starts with a status line for the week just ended: last successful weekday run, weekday runs vs the
     week's actual NYSE trading days, missed and late runs, errors;
   - "late" = a weekday run that started after 18:00 ET, or that ran on a later day (catch-up);
-  - days before MONITORING_START (2026-10-22, when the weekday task was created) are not expected and never "missed";
+  - days before MONITORING_START (2026-10-23, the first scheduled weekday run) are not expected and never "missed";
   - the weekday run notifies once if the last successful weekday run was more than 3 trading days ago (no repeat until
     runs are normal again).
 
@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ET = ZoneInfo("America/New_York")
 KEEP = 120
 GAP_TRADING_DAYS = 3
-MONITORING_START = date(2026, 10, 22)      # weekday task created 2026-10-22; earlier days were never expected to run
+MONITORING_START = date(2026, 10, 23)      # first scheduled weekday run (task created 2026-10-22 21:10 ET, after that day's run time)
 
 
 def load(path):
