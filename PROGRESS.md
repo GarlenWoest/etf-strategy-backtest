@@ -32,6 +32,10 @@ Goal: fix the research infrastructure before any new hypothesis. There are 7 pri
   - P1 and P2 need your approval.
 - **Open decisions:** cap_tolerance and band values for future pre-registrations; the P1 and P2 fixes.
 - **Tests:** 143 pass. The memory ledger has 41 records, chain intact.
+- **Today's scheduled run executed and was verified:**
+  - 16:49:01–16:49:15 ET, status ok;
+  - all 4 opening orders filled, and the fill prices match a fresh Yahoo download;
+  - first values: A $100.41, B $100.02, SPY $100.34, 70/30 $100.26 (one day, meaningless).
 
 **Research paused after 0/142; paper books and monitoring running.** (User decision 2026-10-26.) No new hypotheses for gold, GBP/USD or USD/JPY until the user decides; `config.yaml specialists.research_paused: true`.
 

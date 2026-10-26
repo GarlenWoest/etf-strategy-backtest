@@ -94,4 +94,29 @@ v1 stays the engine of record for the frozen USD/JPY study 1. The corrections ar
 
 ## 8. Today's scheduled run (10-26)
 
-_Pending: added after the 16:48 ET run._
+**The run executed:**
+- heartbeat `weekday-20261026T164901`, 16:49:01–16:49:15 ET, status ok;
+- the gap check was quiet;
+- no update refusals were logged.
+
+| Check | Result |
+|---|---|
+| Pending orders | All 4 filled at the 10-26 open; none left |
+| Trades written | 8 rows in `paper/trades.csv` |
+| Fill opens vs a fresh Yahoo download at 16:50 ET | All six match (DBC, VTI, TQQQ, UPRO, SPY, GLD) |
+| Costs | Fill prices = open × (1 + 0.07%), or 0.10% for TQQQ/UPRO |
+| First values, recomputed by hand from the shares, cash and fresh closes | Exact match for all five books (table below) |
+| Book B | BUY GLD 25% filled at the 10-26 open, including costs; exit rule stored (stop 348, take profit 395, exit on or after 2026-12-04); journal intact |
+
+**First values (PAPER, FICTIONAL MONEY), 10-26 close:**
+
+| Book | Value |
+|---|---|
+| A (V122 + V074) | $100.41 |
+| B | $100.02 |
+| SPY | $100.34 |
+| 70/30 SPY/GLD | $100.26 |
+
+One day is statistically meaningless.
+
+**Side finding:** Yahoo's quote snapshot at 12:21 ET showed TQQQ quotes roughly 7–10% away from the day's actual trading range, which confirms that Yahoo's `info` quotes are stale and unusable (section 5).
