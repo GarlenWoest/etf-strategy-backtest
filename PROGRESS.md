@@ -1,8 +1,38 @@
 # PROGRESS
 
-_Last updated: 2026-10-26 (research paused after 0/142; paper books and monitoring running)_
+_Last updated: 2026-10-26 (research-quality phase, Priority 1 of 7 done; research pause for strategies still active)_
 
 ## Current phase
+### Research-quality phase (user instruction 2026-10-26)
+Goal: fix the research infrastructure before any new hypothesis. There are 7 priorities.
+- **Execution limits for this session:** Priority 1 and 2 only. Stop after each with a one-page update, wait for approval, commit locally, don't push.
+- **Priority 2:** research only. It produces a vendor table per source (cost, license, history, granularity, bid/ask, timestamp zone, known issues, login) and recommends the cheapest option that passes the quality tests.
+- **Still in force:**
+  - holdout locked;
+  - research paused for strategies;
+  - no installs or downloads of large datasets or paid services without approval.
+
+**Priority 1, infrastructure audit and FX engine fixes: DONE, awaiting approval.** Report: `reports/infrastructure_audit.md`.
+- **Engine v2:**
+  - `src/fx_engine_v2.py` holds currency balances and is for future experiments only; v1 is unchanged and remains the engine of record for V135–V142.
+  - It fixes the D1 sizing ratchet, D2 K4 counting, D3 v1's implicit daily re-sizing of the yen leg, and two negligible issues (D4, D5).
+  - 14 tests.
+  - Comparison (diagnostic, N unchanged): `reports/specialists/fx_engine_v2_comparison.md`. No verdict changes; best DSR 0.39 vs 0.37; always-long holds 0.99x vs v1's 0.52x average.
+  - Runner: `tools/compare_fx_engines.py` (adds 9 DIAGNOSTIC rows to research_log.csv).
+- **Clock, checked against data:**
+  - Japan exact (JGB gaps 1990–2023); UK exact (gov.uk 2019–2028); NYSE exact apart from 4 unscheduled closures.
+  - **Error fixed:** the H.10 calendar is the Fed Board's (Saturday holidays observed on Friday from 2010), so `us_board_holidays` was added.
+  - DEXJPUS has 3 stale 2007 holiday rows (data incident).
+- **Costs and rollover:** unverified assumptions (evidence class D). Yahoo bid/ask snapshots are unusable.
+- **Paper records:** journal intact; watchlist fills match Yahoo opens.
+- **Five weaknesses found in `paper_books.py`, not fixed:**
+  - P1: a silent no-op if there's no bar for today;
+  - P2: one missing price fails the whole update;
+  - P3–P5: documented only.
+  - P1 and P2 need your approval.
+- **Open decisions:** cap_tolerance and band values for future pre-registrations; the P1 and P2 fixes.
+- **Tests:** 143 pass. The memory ledger has 41 records, chain intact.
+
 **Research paused after 0/142; paper books and monitoring running.** (User decision 2026-10-26.) No new hypotheses for gold, GBP/USD or USD/JPY until the user decides; `config.yaml specialists.research_paused: true`.
 
 - **USD/JPY sizing diagnostic (DIAGNOSTIC, SIZING BUG CHECK; not trials, no N increase):** resetting positions to 1x at each weekly decision changes no kill verdict; all 8 trials stay killed (best DSR 0.39 re-sized vs 0.37 frozen). Counting only true direction changes for K4 changes no verdict either. Report: `reports/specialists/usdjpy/study1_diagnostic_sizing.md`.

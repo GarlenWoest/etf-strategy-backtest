@@ -86,3 +86,14 @@ def test_active_sessions_overlap_and_holiday():
     s = C.active_sessions(at("2026-10-21T13:00"))                     # 09:00 NY, 14:00 London (both on DST)
     assert "London" in s and "New York" in s and "Tokyo" not in s
     assert "London" not in C.active_sessions(at("2026-12-25T12:00"))  # Christmas
+
+
+def test_board_calendar_matches_h10_saturday_rule():
+    """Fed Board (H.10/H.15): Saturday holidays observed on Friday from 2010 (checked against DEXJPUS gaps 1990-2023)."""
+    from src.clock import us_board_holidays as B
+    for d in (date(2010, 12, 24), date(2010, 12, 31), date(2015, 7, 3), date(2017, 11, 10), date(2021, 12, 31),
+              date(2023, 11, 10), date(2026, 7, 3)):
+        assert d in B(d.year), d
+    for d in (date(2009, 7, 3), date(2006, 11, 10), date(2021, 6, 18)):
+        assert d not in B(d.year), d
+    assert date(2026, 10, 12) in B(2026) and date(2026, 11, 11) in B(2026)

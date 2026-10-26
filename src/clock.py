@@ -12,7 +12,11 @@ Conventions (labelled as conventions, not evidence):
                 empirical question (UNKNOWN until intraday data is approved).
 Holidays (full-day closures, rule-based with explicit special days):
   us_nyse_holidays    NYSE (copied from tools/watchlist_signals.py, which stays unchanged)
-  us_fed_holidays     Federal Reserve / H.10 and H.15 calendar (Saturday holidays not observed)
+  us_fed_holidays     Federal Reserve BANKS (Saturday holidays not observed)
+  us_board_holidays   Federal Reserve BOARD, which publishes H.10/H.15: Saturday holidays are observed on the
+                      preceding Friday (checked against every DEXJPUS gap 1990-2023; ad-hoc closures such as
+                      2001-09-11, presidential funerals and inaugurations, and Dec 24/26 executive-order
+                      closures are not rule-based and are listed in reports/infrastructure_audit.md)
   uk_bank_holidays    England and Wales, 1990+
   jp_national_holidays Japan national holidays 1990+, with substitute and citizens' holidays
   jp_bank_holidays    national holidays plus Dec 31 and Jan 2-3 (Tokyo bank closures)
@@ -77,6 +81,25 @@ def us_fed_holidays(y):
         if d.weekday() != 5:
             h.add(sun(d))
     return frozenset(h)
+
+
+@lru_cache(maxsize=None)
+def us_board_holidays(y):
+    """Federal Reserve Board (H.10 / H.15 publication): Sunday holidays move to Monday; from 2010, Saturday holidays move
+    to Friday. EMPIRICAL rule from the DEXJPUS gaps: H.10 was published on such Fridays up to 2009-07-03 and not from
+    2010-12-24 on; 2021-06-18 (Juneteenth, enacted the day before) still had a rate."""
+    shift = y >= 2010
+    sat_sun = lambda d: d + timedelta(days=1) if d.weekday() == 6 else \
+        (d - timedelta(days=1) if shift and d != date(2021, 6, 19) else None) if d.weekday() == 5 else d
+    h = {nth_weekday(y, 1, 0, 3), nth_weekday(y, 2, 0, 3), last_weekday(y, 5, 0), nth_weekday(y, 9, 0, 1),
+         nth_weekday(y, 10, 0, 2), nth_weekday(y, 11, 3, 4)}
+    for d in (date(y, 7, 4), date(y, 11, 11), date(y, 12, 25)) + ((date(y, 6, 19),) if y >= 2021 else ()):
+        h.add(sat_sun(d))
+    if y + 1 >= 2011 and date(y + 1, 1, 1).weekday() == 5:          # next New Year's Day on a Saturday -> Dec 31
+        h.add(date(y, 12, 31))
+    if date(y, 1, 1).weekday() != 5:
+        h.add(sat_sun(date(y, 1, 1)))
+    return frozenset(x for x in h if x is not None)
 
 
 # ---------------------------------------------------------------- UK (England and Wales)
