@@ -1,9 +1,12 @@
 # PROGRESS
 
-_Last updated: 2026-10-23 (USD/JPY pre-registered; waiting for approval to run)_
+_Last updated: 2026-10-26 (USD/JPY study 1: 0 of 8 survive)_
 
 ## Current phase
-**USD/JPY specialist: built through pre-registration (2026-10-23). 8 trials frozen (V135–V142, cumulative N = 142). No backtest has been run; waiting for your approval to run them.**
+**USD/JPY study 1 complete (2026-10-26): 0 of 8 survive. Best Deflated Sharpe 0.37 at N = 142 (V142). Always-long validation Sharpe 0.24.** Report: `reports/specialists/usdjpy/study1_kill_table.md`. Results, rejections and one error (sizing ratchet, not corrected) are in `research/memory/research.jsonl`. Stopped, per instruction.
+
+### USD/JPY specialist pre-registration (2026-10-23)
+8 trials frozen (V135–V142, cumulative N = 142) in commit 2aae894.
 - See `research/USDJPY_PREREGISTRATION.md` (trial list), `research/EXPANSION_PLAN.md` section 15 (decisions and progress), `reports/specialists/usdjpy/data_quality.md`.
 - New modules: `src/clock.py`, `src/memory.py`, `src/library.py`, `src/fx_engine.py`, `src/specialists/`. The existing engine, studies, tasks and paper books are unchanged.
 - **Rule 1 amendment (user, 2026-10-23):** a read-only FRED/ALFRED API key is allowed, read only from the env var `FRED_API_KEY`, never printed, logged or committed. Not used yet: none of the frozen hypotheses needs revised macro data.
@@ -77,6 +80,8 @@ The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It ha
 9. **Study 3 data check:** the first bond cross-check against Shiller showed correlation 0.31. Cause: Shiller dates each monthly bond return by its start month. Aligned, the series match at 1.000; documented in the validation script.
 10. **Study 3 report:** the first version said "1 of 16" trials pass the DSR; the correct count is 4 (V119–V122). Fixed with a report-only rebuild (no duplicate log rows).
 11. **Rule 7 slip during the close-out:** a shell command briefly wrote an empty scratch file to /tmp (outside the project). It was deleted immediately; nothing else was written outside trading-research/.
+12. **USD/JPY study 1 sizing rule (my design error):** the frozen rule shrinks a position when it exceeds the 1x cap but never grows it back, so long-held positions (always-long, V135) drifted to about 0.3–0.4x exposure. Found after the run; disclosed in the report and memory ledger; not corrected, per the pre-registration.
+13. **USD/JPY walk-forward:** the shared walk-forward helper raises an error when both grid values never traded in a training window; the runner uses a local copy that treats an undefined Sharpe as 0 (ties to the first column, as before). Found before anything was logged.
 6. Several unit-test expectations I wrote were wrong (hand arithmetic, fill timing). In each case the code was verified against a hand calculation before the test was corrected.
 
 ## If the project is ever resumed

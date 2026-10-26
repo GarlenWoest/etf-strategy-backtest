@@ -87,6 +87,8 @@ def rows():
          "0 of 20 READMEs clearly show out-of-sample results, 0 show live results, 2 show results with costs."),
         ("F005", "USD/JPY data quality: Yahoo daily FX bars fail cross-check against FRED H.10", "reports/specialists/usdjpy/data_quality.md", "usdjpy",
          "Levels agree but daily-return correlation is 0.39 (0.20 after 2011); DEXJPUS is the single price source; JGB 10Y matches OECD (corr 0.9995)."),
+        ("F006", "USD/JPY study 1: 8 pre-registered rate-differential/carry/curve trials, 0 survive", "reports/specialists/usdjpy/study1_kill_table.md", "usdjpy",
+         "Validation 2015-2023 at <=1x: best Deflated Sharpe 0.37 (N=142); always-long Sharpe 0.24; differential momentum and 63-day curve-slope rules lost to flat; the 126-day curve-slope rule had in-sample Sharpe -0.26 but validation 0.47 (unstable)."),
     ]
     for sid, title, path, mk, summ in own:
         out.append({"source_id": sid, "title": title, "author": "trading-research project", "source_type": "own study",
