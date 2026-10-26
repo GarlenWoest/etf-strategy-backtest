@@ -1,9 +1,19 @@
 # PROGRESS
 
-_Last updated: 2026-10-26 (USD/JPY study 1: 0 of 8 survive)_
+_Last updated: 2026-10-26 (research paused after 0/142; paper books and monitoring running)_
 
 ## Current phase
-**USD/JPY study 1 complete (2026-10-26): 0 of 8 survive. Best Deflated Sharpe 0.37 at N = 142 (V142). Always-long validation Sharpe 0.24.** Report: `reports/specialists/usdjpy/study1_kill_table.md`. Results, rejections and one error (sizing ratchet, not corrected) are in `research/memory/research.jsonl`. Stopped, per instruction.
+**Research paused after 0/142; paper books and monitoring running.** (User decision 2026-10-26.) No new hypotheses for gold, GBP/USD or USD/JPY until the user decides; `config.yaml specialists.research_paused: true`.
+
+- **USD/JPY sizing diagnostic (DIAGNOSTIC, SIZING BUG CHECK; not trials, no N increase):** resetting positions to 1x at each weekly decision changes no kill verdict; all 8 trials stay killed (best DSR 0.39 re-sized vs 0.37 frozen). Counting only true direction changes for K4 changes no verdict either. Report: `reports/specialists/usdjpy/study1_diagnostic_sizing.md`.
+- **Monitoring status 2026-10-26:**
+  - The Sunday 10-25 brief ran, 18:35–20:42 ET.
+  - Book B journal entry #1: BUY GLD 25%, fill planned at the 10-26 open; the journal check is intact.
+  - The private backup failed, because the repo and token don't exist yet.
+  - The paper books process the 10-26 open in today's 16:45 ET weekday run.
+
+### USD/JPY study 1 (2026-10-26)
+**0 of 8 survive. Best Deflated Sharpe 0.37 at N = 142 (V142). Always-long validation Sharpe 0.24.** Report: `reports/specialists/usdjpy/study1_kill_table.md`. Results, rejections and one error (sizing ratchet, not corrected) are in `research/memory/research.jsonl`. Stopped, per instruction.
 
 ### USD/JPY specialist pre-registration (2026-10-23)
 8 trials frozen (V135–V142, cumulative N = 142) in commit 2aae894.
@@ -82,6 +92,7 @@ The holdout (2024-01-01 onward) is **locked by your decision (option a)**. It ha
 11. **Rule 7 slip during the close-out:** a shell command briefly wrote an empty scratch file to /tmp (outside the project). It was deleted immediately; nothing else was written outside trading-research/.
 12. **USD/JPY study 1 sizing rule (my design error):** the frozen rule shrinks a position when it exceeds the 1x cap but never grows it back, so long-held positions (always-long, V135) drifted to about 0.3–0.4x exposure. Found after the run; disclosed in the report and memory ledger; not corrected, per the pre-registration.
 13. **USD/JPY walk-forward:** the shared walk-forward helper raises an error when both grid values never traded in a training window; the runner uses a local copy that treats an undefined Sharpe as 0 (ties to the first column, as before). Found before anything was logged.
+14. **USD/JPY K4 counting:** the frozen run counted cap trims as position changes. The diagnostic shows no verdict changed; recorded in the memory ledger.
 6. Several unit-test expectations I wrote were wrong (hand arithmetic, fill timing). In each case the code was verified against a hand calculation before the test was corrected.
 
 ## If the project is ever resumed

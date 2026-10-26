@@ -71,3 +71,16 @@ def test_bad_targets_and_missing_data_rejected():
     s = series(100.0); s.iloc[3] = np.nan
     with pytest.raises(ValueError):
         run_fx(s, series(0.0), series(0.0), series(0), 0.0, 0.0, 10000)
+
+
+def test_resize_default_unchanged_and_diagnostic_resets_to_1x():
+    s = series(np.r_[np.full(10, 100.0), np.full(10, 80.0), np.full(10, 120.0)])   # loss shrinks notional, then recovery
+    t = series(np.nan); t.iloc[0] = 1
+    a = run_fx(s, series(0.03), series(0.0), t, 0.0001, 0.0, 10000)
+    b = run_fx(s, series(0.03), series(0.0), t, 0.0001, 0.0, 10000, resize=None)
+    pd.testing.assert_series_equal(a.equity, b.equity)                  # default = frozen behaviour
+    weekly = pd.Series(False, index=IDX); weekly.iloc[::5] = True
+    c = run_fx(s, series(0.03), series(0.0), t, 0.0001, 0.0, 10000, resize=weekly)
+    assert abs(a.notional.iloc[-1] / a.equity.iloc[-1] - 1.0) > 0.02     # frozen rule: drifted away from 1x
+    assert abs(c.notional.iloc[-1] / c.equity.iloc[-1] - 1.0) < 0.02     # diagnostic: back near 1x after a re-size
+    assert len(c.trades) > len(a.trades)                                # re-sizes are trades and pay costs

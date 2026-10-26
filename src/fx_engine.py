@@ -31,7 +31,7 @@ class FXResult:
 
 
 def run_fx(spot, r_usd, r_quote, target, cost_one_way, markup_annual, start_equity, max_x=1.0, lag=1,
-           start=None, end=None):
+           start=None, end=None, resize=None):
     """spot, r_usd, r_quote: Series on the same daily index (rates as annual decimals, already lagged to what was
     known on each date); target: Series of -1/0/+1 decided on each date (NaN = keep previous decision)."""
     idx = spot.index
@@ -45,6 +45,10 @@ def run_fx(spot, r_usd, r_quote, target, cost_one_way, markup_annual, start_equi
     if np.isnan(S).any() or np.isnan(ru).any() or np.isnan(rq).any():
         raise ValueError("missing spot or rate inside the simulation window")
     tg = target.reindex(spot.index).ffill().shift(lag).reindex(idx).fillna(0.0).to_numpy(float)
+    # optional DIAGNOSTIC re-sizing: on days flagged in `resize` (decision days, shifted by `lag` like the targets),
+    # an open position is reset to max_x x equity, paying costs on the change. Default None = frozen behaviour.
+    rs = np.zeros(len(idx), bool) if resize is None else \
+        resize.reindex(spot.index).fillna(False).astype(bool).shift(lag).reindex(idx).fillna(False).to_numpy(bool)
     if not np.isin(tg, (-1.0, 0.0, 1.0)).all():
         raise ValueError("targets must be -1, 0 or +1")
     days = np.r_[0, np.diff(idx.values).astype("timedelta64[D]").astype(int)]
@@ -74,6 +78,14 @@ def run_fx(spot, r_usd, r_quote, target, cost_one_way, markup_annual, start_equi
             trades.append((idx[i], sign, want, traded, S[i], cost))
             sign = want
             N = max_x * e if want else 0.0
+            if i > 0 and e > 0:
+                over[i] -= cost / (e + cost)
+        elif sign and rs[i] and abs(N - max_x * e) > 1e-9:
+            new_n = max_x * e
+            cost = cost_one_way * abs(new_n - N)
+            e -= cost
+            trades.append((idx[i], sign, sign, abs(new_n - N), S[i], cost))
+            N = max_x * e
             if i > 0 and e > 0:
                 over[i] -= cost / (e + cost)
         eq[i] = e

@@ -176,6 +176,7 @@ study3_longhist:                    # Study 3 (user request 2026-10-23). FROZEN 
 
 specialists:                        # Expansion (user decisions 2026-10-23); see research/EXPANSION_PLAN.md
   active: [usdjpy]                  # only USD/JPY may run pre-registered trading research
+  research_paused: true             # user 2026-10-26: no new hypotheses for any market until the user decides; monitoring and paper books continue
   monitoring: [gold, gbpusd]        # research and monitoring mode only
   rule_amendments:
     rule1_fred_key: "a read-only FRED/ALFRED API key is allowed, read only from the environment variable FRED_API_KEY; never printed, logged, written to files or committed; the user sets it"
