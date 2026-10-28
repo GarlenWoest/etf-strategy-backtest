@@ -67,3 +67,14 @@ def test_push_failure_is_reported_not_retried(setup):
     shutil.rmtree(remote)                                         # remote unreachable
     with pytest.raises(RuntimeError, match="git push"):
         BK.run(gd, wt)
+
+
+def test_event_cache_is_not_backed_up(setup):
+    wt, remote, gd = setup
+    (wt / "live" / "events" / "cache").mkdir(parents=True)
+    (wt / "live" / "events" / "cache" / "page.txt").write_text("<html>official page</html>")
+    (wt / "live" / "events" / "events.json").write_text("{}")
+    BK.run(gd, wt)
+    files = subprocess.run(["git", "--git-dir", str(remote), "ls-tree", "-r", "--name-only", "main"],
+                           capture_output=True, text=True, check=True).stdout.split()
+    assert "live/events/events.json" in files and not [f for f in files if "/cache/" in f]

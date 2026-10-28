@@ -9,7 +9,19 @@ _Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, d
 - **Brokers:** if live bid/ask needs a broker login, list the options instead of setting anything up.
 - **Commits:** commit locally after each phase; don't push.
 
-**Phase G, GitHub technology audit: DONE, awaiting approval.** Report: `reports/phaseG_github_audit.md`.
+**Phase H, risk accounting, reliability and backups: DONE, awaiting approval.** Report: `reports/phaseH_reliability.md`.
+- **Heartbeat:** run states (completed/partial/failed; missed and scheduled derived); step and notification-delivery records; an ALERT in the Sunday status line when a notification fails.
+- **Backup:** the event-page cache is excluded.
+- 216 tests pass.
+- **Task-prompt changes drafted, not saved.**
+- **Decisions pending:**
+  - save the two task diffs;
+  - should a Book B stop override the 5-day minimum hold;
+  - does the 1x rule apply to leveraged-ETF exposure in the paper books;
+  - Yahoo prices in `infrastructure_audit.md` before a public push.
+- **Your steps:** private backup repo, token and first push (instructions in the report).
+
+**Phase G, GitHub technology audit: DONE, approved 2026-10-28.** Report: `reports/phaseG_github_audit.md`.
 - **Method:** read-only (API metadata, licences, advisories, CI listings, READMEs, docs); nothing cloned or run.
 - **Recommendation: adopt nothing now.** The binding constraints are data quality and licensing.
 - **Conditional later:** NautilusTrader, only for an approved intraday FX hypothesis on validated data, with install approval.

@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 ALLOWED = ("paper/", "live/", "briefs/")
+EXCLUDE = (":(exclude)live/events/cache/**",)    # Phase H: cached official web pages are re-fetchable; not backed up
 NAME, EMAIL = "Garlen Woest", "324629888+GarlenWoest@users.noreply.github.com"
 ET = ZoneInfo("America/New_York")
 
@@ -51,7 +52,7 @@ def disallowed(paths):
 def stage_and_verify(gitdir, worktree):
     present = [d.rstrip("/") for d in ALLOWED if (worktree / d).exists()]
     if present:
-        git(gitdir, worktree, "add", "-A", "-f", "--", *present, ":(exclude)**/.DS_Store")
+        git(gitdir, worktree, "add", "-A", "-f", "--", *present, ":(exclude)**/.DS_Store", *EXCLUDE)
     tracked = git(gitdir, worktree, "ls-files").stdout.splitlines()
     bad = disallowed(tracked)
     if bad:

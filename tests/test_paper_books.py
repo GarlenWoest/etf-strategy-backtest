@@ -217,3 +217,27 @@ def test_missing_open_defers_order_and_missing_close_uses_last_close(paper, monk
     px, a = fake(None, None)["Close"], paper.load()["books"]["A"]["V122"]
     assert abs(v["A_V122"].iloc[-1] - (a["cash"] + a["shares"]["VTI"] * px.loc["2026-10-27", "VTI"]
                                        + a["shares"]["DBC"] * px.loc["2026-10-28", "DBC"])) < 1e-4     # values.csv keeps 4 decimals
+
+
+def _falling_gld(t, s):
+    """GLD closes below the stop on day 2 (inside the 5-day minimum hold) and opens lower than the stop later."""
+    df = fake(t, s)
+    idx = df.index
+    g = pd.Series(370.0, index=idx)
+    g[idx >= pd.Timestamp("2026-10-28")] = 340.0                   # close below a 348 stop from Wed 10-28
+    df[("Close", "GLD")] = g
+    df[("Open", "GLD")] = g.shift(1).fillna(370.0) - 2.0            # each open gaps 2 below the prior close
+    return df
+
+
+def test_stop_is_checked_at_the_close_and_filled_at_the_next_open_not_the_stop(paper, monkeypatch):
+    """Documents current behaviour (Phase H audit): a stop is evaluated once a day at the close, only after the 5-day
+    minimum hold, and fills at the next open's price (gap risk), never at the stop price."""
+    monkeypatch.setattr(PB, "download", _falling_gld)
+    J(paper, "2026-10-25", action="BUY", instrument="GLD", size_pct=25, exit_rule={"stop_below": 348})
+    PB.update(paper, date(2026, 11, 6))
+    tr = paper.read_csv(paper.trades)
+    sells = tr[(tr["book"] == "B") & (tr["side"] == "SELL")]
+    assert list(sells["date"]) == ["2026-11-02"]                    # not 10-29: the stop waits for the minimum hold
+    fill = float(sells["price_incl_costs"].iloc[0])
+    assert fill < 348 and abs(fill - 338.0 * (1 - 0.0007)) < 1e-3     # next open (gapped) less costs, not 348
