@@ -189,6 +189,8 @@ specialists:                        # Expansion (user decisions 2026-10-23); see
     cap_tolerance: 0.0              # user decision 2026-10-28: 1x is a HARD limit (supersedes 0.05 approved 2026-10-26)
     cap_reset: 0.95                 # user decision 2026-10-28: a close above 1.00x is trimmed back to 0.95x equity
     fixed_before_preregistration: true   # any new pre-registration uses these values unless the user changes them first
+  data_sources:
+    histdata: "user decision 2026-10-28: daily-level use only; intraday BLOCKED pending cross-vendor check. Not used for intraday or session research unless an independent vendor confirms its timestamps year by year. No per-year time-zone correction derived from HistData itself may be adopted."
   data_quality:                     # intraday data tests (reports/data_vendor_comparison.md section 5)
     q2_timezone_rule:               # user-approved 2026-10-28; FIXED before any year other than 2019 is tested
       event: "BLS Employment Situation release, 08:30:00 America/New_York"

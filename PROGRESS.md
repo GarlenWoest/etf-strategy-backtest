@@ -9,7 +9,14 @@ _Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, d
 - **Brokers:** if live bid/ask needs a broker login, list the options instead of setting anything up.
 - **Commits:** commit locally after each phase; don't push.
 
-**Phase D, HistData pilot without TrueFX: DONE, awaiting approval.** Report: `reports/phaseD_histdata.md`.
+**Decisions 2026-10-28 (user):**
+- HistData is for daily-level use only; intraday use is BLOCKED pending a cross-vendor check. No HistData-derived time-zone correction is adopted (`config.yaml specialists.data_sources`).
+- No third year for now.
+- Phase E is postponed until a cross-vendor check passes.
+- Phase F is next.
+- **Pending check:** after 16:50 ET on 2026-10-29, verify that the weekday run executed steps 2b and 2c (heartbeat, `live/intel/latest.json`, `live/events/events.json` timestamps, and the run transcript).
+
+**Phase D, HistData pilot without TrueFX: DONE, approved 2026-10-28.** Report: `reports/phaseD_histdata.md`.
 - **Separate-year test (2018, fixed before reading the data):** reading C **FAILS (9/12)**. The 2018 data uses New York local time instead (exploratory: 12/12 discriminating days; 0 weekend ticks).
 - **The convention changed between Nov 2018 and Mar 2019,** so every year must be tested before use.
 - **The 2019 "out-of-order row"** is a duplicated hour (2,360 identical rows); exact duplicates are now dropped.
