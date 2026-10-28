@@ -1,6 +1,6 @@
 # PROGRESS
 
-_Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done; research pause for strategies still active)_
+_Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, data pilot in progress; research pause for strategies still active)_
 
 ## Current phase
 ### Research-quality phase (user instruction 2026-10-26)
@@ -12,7 +12,24 @@ Goal: fix the research infrastructure before any new hypothesis. There are 7 pri
   - research paused for strategies;
   - no installs or downloads of large datasets or paid services without approval.
 
-**Priority 2, data-vendor research: DONE (research only), awaiting approval.** Report: `reports/data_vendor_comparison.md`.
+**Data pilot (approved 2026-10-28): HistData USD/JPY ticks, 2019. NOT PASSED YET.** Report: `reports/data_quality/histdata_usdjpy_2019_pilot.md`; runner `tools/pilot_histdata.py`.
+- **Download:** 12 monthly files, 122 MB zipped (896 MB unzipped, 20.8M ticks), in `data/raw/histdata/usdjpy_tick_2019/` with a SHA-256 manifest. Not committed.
+- **Key finding:** HistData's FAQ ("fixed EST, no DST") is wrong for 2019. The file time is UTC−5 in European winter and UTC−4 during European summer time. With that reading:
+  - payroll jumps land 0.6–1.8 s after 08:30:00 New York;
+  - the gap to the H.10 noon rate shrinks from up to 70 pips to at most 2.7 (median 0.50);
+  - weekend ticks drop from 50,878 to 0.
+- **The reading was found from the same year,** so it must be confirmed on another year and by TrueFX.
+- **Verdicts:**
+  - Q1 conditional; Q3, Q5, Q6, Q7, Q9 pass;
+  - Q2 fails (the documented reading, and the corrected reading under the pre-set minute rule, 9 of 12);
+  - Q4 and Q8 are pending until the TrueFX files arrive.
+- **Next:**
+  - you download the TrueFX USD/JPY 2019 monthly files to `data/raw/truefx/`, and I rerun the pilot;
+  - Dukascopy email draft: `research/DUKASCOPY_EMAIL_DRAFT.md` (not sent);
+  - Databento skipped;
+  - Priority 3 waits until the pilot passes.
+
+**Priority 2, data-vendor research: DONE (research only), approved 2026-10-28.** Report: `reports/data_vendor_comparison.md`.
 - Nothing was downloaded, bought or registered.
 - **Sources reviewed:** Dukascopy, HistData, TrueFX, FXCM, OANDA, FirstRate, Databento/CME, EBS, LSEG, Bloomberg, LBMA/IBA, and macro sources (FRED/ALFRED, official calendars, OECD revisions database, BoE, FXMacroData, Trading Economics).
 - **Verdict:** no free source shows executable costs. For session patterns, two agreeing free sources should suffice.
@@ -43,7 +60,7 @@ Goal: fix the research infrastructure before any new hypothesis. There are 7 pri
 - **Decided 2026-10-26 (user):**
   - engine v2 defaults are band 0.10 and cap_tolerance 0.05, fixed before any new pre-registration (`config.yaml specialists.engine_v2`);
   - the paper-script fixes P1 and P2 are implemented with tests.
-- **Tests:** 146 pass. The memory ledger has 45 records, chain intact.
+- **Tests:** 146 pass. The memory ledger has 48 records, chain intact.
 - **Today's scheduled run executed and was verified:**
   - 16:49:01–16:49:15 ET, status ok;
   - all 4 opening orders filled, and the fill prices match a fresh Yahoo download;
