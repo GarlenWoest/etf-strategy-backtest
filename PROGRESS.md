@@ -1,8 +1,21 @@
 # PROGRESS
 
-_Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, data pilot in progress; research pause for strategies still active)_
+_Last updated: 2026-10-28 (Phases A–H done; public repo pushed; private backup working; research pause for strategies still active)_
 
 ## Current phase
+### Publishing and backup status (verified 2026-10-28)
+- **Public repo** (GarlenWoest/etf-strategy-backtest): pushed by the user.
+  - GitHub main = local `3c51573`.
+  - Authors and committers: only the user's noreply address. Commit messages carry Claude's Co-Authored-By trailer.
+  - The raw vendor quotes were removed from the unpushed history before the push. Two older stale-price examples are still in public history and are reworded going forward.
+- **Private backup** (GarlenWoest/trading-research-paper-log): working.
+  - `backup_private.py run` gives BACKUP OK; GitHub private main = `.backup.git` HEAD = `8d11673` (16 files).
+  - Only `paper/`, `live/` and `briefs/` (no event cache); identity only the user's noreply address.
+  - The repo isn't publicly visible (unauthenticated requests get 404).
+  - The token stays in the user's macOS Keychain; Claude never handled it.
+  - **The token has an expiry date: renew it before then (steps in `reports/phaseH_reliability.md`).**
+- **Next check:** after 16:50 ET on 2026-10-29, verify the weekday run executed steps 2b and 2c, with step and notification records.
+
 ### Next development phase (user instruction 2026-10-28): current-market intelligence and research infrastructure
 - **Execution limits for this session:** Phases A and B only. Stop after each with a one-page update.
 - **Monitoring:** plain Python, polling official sources a few times a day at most. Any new scheduled task needs your approval and a weekly usage estimate first.
