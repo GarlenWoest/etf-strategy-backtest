@@ -2,8 +2,12 @@
 and rebuild the full-text index research/library/library.sqlite (derived, git-ignored).
 
 Inputs (never modified): research/sources.csv (Study 1, S01-S49), research/sources_commodities.csv (Study 2,
-C001-C153), research/library/usdjpy_sources.csv (USD/JPY specialist, FX###), plus our own findings (F###, class F)
-written below from the project's reports. Evidence classes for migrated rows are assigned by a documented heuristic
+C001-C153), research/library/usdjpy_sources.csv (USD/JPY specialist, FX001-FX021), research/library/sources_phaseF.csv
+(sources added and verified in Phase F, FX022+), plus our own findings (F###, class F) written below from the project's
+reports. Phase F (2026-10-28) overlays: research/library/corrections.csv (field corrections with reason and verifying
+URL, applied here, so the historical inputs stay untouched) and research/library/verification.csv (what was actually
+read: L1 abstract verified, L2 relevant full text reviewed). Rows without a verification record carry an honest
+research_status: the earlier bulk labels "read (see ...)" did not record per-source reading depth. Evidence classes for migrated rows are assigned by a documented heuristic
 from the source type and flagged for review in `notes`.
 Usage: .venv/bin/python tools/build_library.py
 """
@@ -60,7 +64,7 @@ def rows():
                     "url": r["link"], "markets": markets_for(r["title"] + " " + r["key_claim"]), "topic": "Study 1 literature",
                     "evidence_strength": strength(r["evidence_quality"]), "evidence_class": heuristic_class(r["type"], "keep", ""),
                     "summary": r["key_claim"], "extracted_hypotheses": "", "methodology": "", "limitations": r["notes"],
-                    "contradicting": "", "reproducibility": "", "research_status": "read (see LITERATURE_REVIEW.md)",
+                    "contradicting": "", "reproducibility": "", "research_status": "listed in LITERATURE_REVIEW.md; per-source reading depth not recorded",
                     "last_verified": "2026-10-22", "decision": "keep", "notes": "class by heuristic from type; review",
                     "provenance": "research/sources.csv"})
     for r in csv.DictReader(open(R / "sources_commodities.csv", newline="", encoding="utf-8")):
@@ -71,11 +75,13 @@ def rows():
                     "extracted_hypotheses": "", "methodology": "out-of-sample: %s; costs: %s; daily/ETF: %s" % (
                         r["out_of_sample"], r["costs_included"], r["works_daily_etf"]),
                     "limitations": r["grading_notes"], "contradicting": "", "reproducibility": "",
-                    "research_status": "read (see IDEA_POOL_COMMODITIES.md)", "last_verified": "2026-10-22",
+                    "research_status": "listed in IDEA_POOL_COMMODITIES.md; per-source reading depth not recorded", "last_verified": "2026-10-22",
                     "decision": r["decision"], "notes": "class by heuristic from type; review; reason: %s" % r["reason"],
                     "provenance": "research/sources_commodities.csv"})
     for r in csv.DictReader(open(R / "library" / "usdjpy_sources.csv", newline="", encoding="utf-8")):
         out.append({**{f: r.get(f, "") for f in LB.FIELDS}, "provenance": "research/library/usdjpy_sources.csv"})
+    for r in csv.DictReader(open(R / "library" / "sources_phaseF.csv", newline="", encoding="utf-8")):
+        out.append({**{f: r.get(f, "") for f in LB.FIELDS}, "provenance": "research/library/sources_phaseF.csv"})
     own = [
         ("F001", "Study 1: 92 pre-registered ETF strategies, 0 survive", "reports/FINAL_REPORT.md", "etf;gold",
          "Daily end-of-day rules on GLD/SPY/QQQ/TLT (+2x/3x), 2019-2023 validation: best Deflated Sharpe 0.73 (N=92); multi-asset trend near-misses had higher Sharpe but lower return than equal weight."),
@@ -100,6 +106,27 @@ def rows():
     return out
 
 
+def apply_overlays(rs):
+    """Phase F: apply field corrections and verification depth (never editing the historical input files)."""
+    by = {r["source_id"]: r for r in rs}
+    n = 0
+    for c in csv.DictReader(open(R / "library" / "corrections.csv", newline="", encoding="utf-8")):
+        r = by.get(c["source_id"])
+        if r is None:
+            raise SystemExit("correction for unknown source %s" % c["source_id"])
+        r[c["field"]] = c["new_value"]
+        tag = "corrected %s (%s): %s [%s]" % (c["verified_on"], c["field"], c["reason"], c["verified_url"])
+        r["notes"] = (r["notes"] + "; " if r["notes"] else "") + tag
+        n += 1
+    for v in csv.DictReader(open(R / "library" / "verification.csv", newline="", encoding="utf-8")):
+        r = by.get(v["source_id"])
+        if r is None:
+            raise SystemExit("verification for unknown source %s" % v["source_id"])
+        r["research_status"] = "verified %s: %s (%s)" % (v["depth"], v["what_was_read"], v["verified_on"])
+        r["last_verified"] = v["verified_on"]
+    return n
+
+
 def mark_duplicates(rs):
     """Later copies of a kept source (same normalized title and year) are kept for provenance but marked."""
     first = {}
@@ -114,7 +141,9 @@ def mark_duplicates(rs):
 
 
 if __name__ == "__main__":
-    rs = mark_duplicates(rows())
+    rs = rows()
+    n_corr = apply_overlays(rs)
+    rs = mark_duplicates(rs)
     probs = LB.quality_problems(rs)
     with open(LB.CSV_PATH, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=LB.FIELDS)
@@ -123,7 +152,7 @@ if __name__ == "__main__":
     LB.build_index(rs)
     from collections import Counter
     print("library rows:", len(rs), "| by class:", dict(sorted(Counter(r["evidence_class"] for r in rs).items())),
-          "| keep:", sum(r["decision"] == "keep" for r in rs))
+          "| keep:", sum(r["decision"] == "keep" for r in rs), "| corrections applied:", n_corr)
     print("quality problems (%d):" % len(probs))
     for p in probs[:40]:
         print("  -", p)

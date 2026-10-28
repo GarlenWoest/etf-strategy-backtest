@@ -9,6 +9,16 @@ _Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, d
 - **Brokers:** if live bid/ask needs a broker login, list the options instead of setting anything up.
 - **Commits:** commit locally after each phase; don't push.
 
+**Phase F, library audit and knowledge extraction (USD/JPY first): DONE, awaiting approval.** Report: `reports/phaseF_library_audit.md`.
+- **Library audit:** 234 sources (5 new). Reading depth is recorded only where verified: 207 L0, 17 L1, 4 L2, 6 L3 (our own results).
+- **USD/JPY:** 23 of 28 kept sources verified.
+  - 21 corrections across 11 sources (wrong titles for FX003 and FX012, FX011's year, unsupported claims removed);
+  - FX006 sign for V141/V142 confirmed;
+  - the frozen pre-registration unchanged.
+- **Bulk "read" labels removed.**
+- **Code:** `tools/knowledge.py <tag>` answers the five questions with reading depth attached. 210 tests pass.
+- **Not done:** gold (42/46 L0) and GBP/USD; books, videos and reproductions.
+
 **Decisions 2026-10-28 (user):**
 - HistData is for daily-level use only; intraday use is BLOCKED pending a cross-vendor check. No HistData-derived time-zone correction is adopted (`config.yaml specialists.data_sources`).
 - No third year for now.
