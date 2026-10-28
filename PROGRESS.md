@@ -3,6 +3,23 @@
 _Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, data pilot in progress; research pause for strategies still active)_
 
 ## Current phase
+### Next development phase (user instruction 2026-10-28): current-market intelligence and research infrastructure
+- **Execution limits for this session:** Phases A and B only. Stop after each with a one-page update.
+- **Monitoring:** plain Python, polling official sources a few times a day at most. Any new scheduled task needs your approval and a weekly usage estimate first.
+- **Brokers:** if live bid/ask needs a broker login, list the options instead of setting anything up.
+- **Commits:** commit locally after each phase; don't push.
+
+**Phase A, audit: DONE, awaiting approval.** Report: `reports/phaseA_project_audit.md`.
+- **Verified:** 146 tests; 142 trials; library 229/185; 49 memory records (52 after Phase A, chain intact); engine v2; clock; pilot status; app run history matches the heartbeat; no data file reaches 2024.
+- **Corrected:** "0 validated" means 140 killed plus 2 (V119, V122) that passed Study 3's pre-registered rule but were judged not validated after failing every robustness check.
+- **New findings:**
+  - paper-trade notifications on 10-26 were not delivered, yet the run still recorded ok;
+  - the 0.05 cap tolerance puts exposure above 1.00x on 26,086 of the frozen-target closes; proposal: hard cap 1.00x, trim back to 0.95x (decision for you);
+  - the pilot report printed 5 raw HistData quotes (fixed; still present in local commit aaabc98);
+  - library "read" labels are unverified;
+  - no real-time market inputs exist.
+- **TrueFX:** files still absent, so the cross-vendor check stays blocked.
+
 ### Research-quality phase (user instruction 2026-10-26)
 Goal: fix the research infrastructure before any new hypothesis. There are 7 priorities.
 - **Execution limits for this session:** Priority 1 and 2 only. Stop after each with a one-page update, wait for approval, commit locally, don't push.

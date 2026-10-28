@@ -295,9 +295,9 @@ def main():
           "windows and at 17:00 otherwise, as reading C predicts; reading B would put it at 16:00 New York in those weeks. "
           "The 17% of days outside 17:00–17:14 NY under C are days whose widest spread fell elsewhere in 15:30–18:30.\n",
           "## Q3 detail: largest differences from the H.10 noon rate\n",
-          "| Date | HistData mid 12:00 NY | H.10 | Difference (pips) |", "|---|---|---|---|"]
+          "| Date | Difference, HistData mid 12:00 NY minus H.10 (pips) |", "|---|---|"]
     for _, r in dq3.reindex(dq3["diff_pips"].abs().sort_values(ascending=False).index).head(5).iterrows():
-        L.append("| %s | %.3f | %.2f | %+.2f |" % (r["date"], r["histdata_mid"], r["h10"], r["diff_pips"]))
+        L.append("| %s | %+.2f |" % (r["date"], r["diff_pips"]))      # no vendor quotes in reports (licence: aggregates only)
     L += ["\n## Q5–Q8 detail\n",
           "- Median spread over the year: %.2f pips; London/NY hours %.2f; Tokyo hours %.2f." % (
               t["spread"].median(), t.loc[liq_t, "spread"].median(),
