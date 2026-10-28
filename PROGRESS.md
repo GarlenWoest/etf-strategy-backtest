@@ -9,7 +9,14 @@ _Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, d
 - **Brokers:** if live bid/ask needs a broker login, list the options instead of setting anything up.
 - **Commits:** commit locally after each phase; don't push.
 
-**Phase A, audit: DONE, awaiting approval.** Report: `reports/phaseA_project_audit.md`.
+**Phase A decisions (user, 2026-10-28):**
+1. **1x is a HARD limit.** v2 defaults are now cap_tolerance 0.0 and cap_reset 0.95 (band 0.10 unchanged). Engine 1.2; 171 tests pass, including 24 randomized no-close-above-1.00x tests.
+2. **History rewrite:** remove the 5 HistData quotes from the unpushed history; commands to be shown first.
+3. **Wording from now on:** "140 killed by pre-registered rules; 2 (V119, V122) passed Study 3's primary rule but failed all robustness checks; none judged robust" (SUMMARY/README at the next rebuild).
+4. **Phase H additions:** record notification delivery; alert in the next brief if any failed.
+5. **Proceed to Phase B.**
+
+**Phase A, audit: DONE, approved 2026-10-28.** Report: `reports/phaseA_project_audit.md`.
 - **Verified:** 146 tests; 142 trials; library 229/185; 49 memory records (52 after Phase A, chain intact); engine v2; clock; pilot status; app run history matches the heartbeat; no data file reaches 2024.
 - **Corrected:** "0 validated" means 140 killed plus 2 (V119, V122) that passed Study 3's pre-registered rule but were judged not validated after failing every robustness check.
 - **New findings:**

@@ -185,7 +185,8 @@ specialists:                        # Expansion (user decisions 2026-10-23); see
   data_policy: "daily data only for now; Dukascopy, HistData, TrueFX and World Gold Council only if a pre-registered hypothesis needs them"
   engine_v2:                        # src/fx_engine_v2.py, FUTURE experiments only (v1 stays the engine of record for V135-V142)
     band: 0.10                      # user-approved 2026-10-26: re-size at a decision only if exposure is > 10% of equity off target
-    cap_tolerance: 0.05             # user-approved 2026-10-26: trim only above 1.05 x max_gross_notional_x, back to exactly max
+    cap_tolerance: 0.0              # user decision 2026-10-28: 1x is a HARD limit (supersedes 0.05 approved 2026-10-26)
+    cap_reset: 0.95                 # user decision 2026-10-28: a close above 1.00x is trimmed back to 0.95x equity
     fixed_before_preregistration: true   # any new pre-registration uses these values unless the user changes them first
   data_quality:                     # intraday data tests (reports/data_vendor_comparison.md section 5)
     q2_timezone_rule:               # user-approved 2026-10-28; FIXED before any year other than 2019 is tested

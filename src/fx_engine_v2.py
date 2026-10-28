@@ -25,18 +25,21 @@ Accounting (USD account): two balances, `usd` and `units` of ONE foreign asset (
 Execution: a target decided on data date t (only data known at t) executes at P[t + lag]. Each USD of exposure
 traded pays `cost_one_way`. Target values are signed fractions of equity in the PAIR's direction (USD/JPY +1 =
 long USD / short JPY); NaN = no decision that day (balances are held; only the cap applies).
-Cap: after every close, |exposure| <= max_x x (1 + cap_tolerance) x equity; any excess is trimmed back to max_x
-(a `cap_trim`, with costs).
+Cap (HARD, user decision 2026-10-28): after every close |exposure| <= max_x x equity. Whenever a close would exceed it,
+the position is trimmed back to cap_reset x equity (default 0.95 x max_x is approved as 0.95 with max_x 1.0), with
+costs (a `cap_trim`). Trimming below the cap, not to it, avoids a trim at almost every close. cap_tolerance > 0 and
+cap_reset=None reproduce the earlier designs for comparison reports only.
 """
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
 
-ENGINE_VERSION = "fx_engine_v2 1.1 (2026-10-26)"
+ENGINE_VERSION = "fx_engine_v2 1.2 (2026-10-28)"
 # Defaults approved by the user 2026-10-26, fixed before any new pre-registration (config.yaml specialists.engine_v2):
 DEFAULT_BAND = 0.10            # re-size at a decision only if the exposure is > 10% of equity off target
-DEFAULT_CAP_TOLERANCE = 0.05   # trim only above 1.05 x max_x, back to exactly max_x
+DEFAULT_CAP_TOLERANCE = 0.0    # 2026-10-28: 1x is a HARD limit (supersedes the 0.05 approved 2026-10-26)
+DEFAULT_CAP_RESET = 0.95       # 2026-10-28: a close above the cap is trimmed back to 0.95 x equity
 CHANGE_KINDS = ("open", "close", "reverse")
 
 
@@ -52,14 +55,15 @@ class BalanceResult:
 
 
 def run_balance(price, r_usd, r_asset, target, cost_one_way, markup_annual, start_equity, max_x=1.0, lag=1,
-                band=DEFAULT_BAND, cap_tolerance=DEFAULT_CAP_TOLERANCE, basis_usd=360, basis_asset=365, invert=False, start=None, end=None):
+                band=DEFAULT_BAND, cap_tolerance=DEFAULT_CAP_TOLERANCE, cap_reset=DEFAULT_CAP_RESET, basis_usd=360, basis_asset=365, invert=False, start=None, end=None):
     """price: USD price of one asset unit (or the pair quote if invert=True, e.g. USD/JPY yen per USD); r_usd, r_asset:
     annual decimals already lagged to what was known on each date; target: Series of signed exposure fractions in the
     pair's direction decided on each date (NaN = no decision). invert=True means the pair is USD/XXX (the asset is
     the quote currency): P = 1/price and a long pair position is a short asset balance.
     band: on a decision day with an unchanged direction, re-size only if |exposure_x - target| > band.
-    cap_tolerance: trim only when |exposure| > max_x x (1 + cap_tolerance) x equity, back to exactly max_x; 0 = a strict
-    cap at every close (many tiny trims). Defaults: DEFAULT_BAND and DEFAULT_CAP_TOLERANCE (user-approved)."""
+    cap_tolerance: trim only when |exposure| > max_x x (1 + cap_tolerance) x equity (default 0: hard cap).
+    cap_reset: exposure (x equity) a trim goes back to; None = back to max_x (earlier designs, comparison only).
+    Defaults DEFAULT_BAND, DEFAULT_CAP_TOLERANCE, DEFAULT_CAP_RESET are user-approved (config specialists.engine_v2)."""
     idx = price.index
     if start is not None:
         idx = idx[idx >= pd.Timestamp(start)]
@@ -76,6 +80,8 @@ def run_balance(price, r_usd, r_asset, target, cost_one_way, markup_annual, star
         raise ValueError("targets must satisfy |target| <= max_x")
     if band < 0 or max_x <= 0 or cap_tolerance < 0:
         raise ValueError("band and cap_tolerance must be >= 0 and max_x > 0")
+    if cap_reset is not None and not 0 < cap_reset <= max_x:
+        raise ValueError("cap_reset must be in (0, max_x]")
     P = 1.0 / S if invert else S
     sgn = -1.0 if invert else 1.0                      # pair exposure = sgn x asset exposure
     days = np.r_[0, np.diff(idx.values).astype("timedelta64[D]").astype(int)]
@@ -127,7 +133,7 @@ def run_balance(price, r_usd, r_asset, target, cost_one_way, markup_annual, star
                 cost += trade_to(i, float(w), "decision")
         e = usd + units * P[i]
         if e > 0 and abs(units * P[i]) > max_x * e * (1 + cap_tolerance + 1e-12):
-            cost += trade_to(i, float(np.sign(sgn * units)) * max_x, "cap_trim")
+            cost += trade_to(i, float(np.sign(sgn * units)) * (max_x if cap_reset is None else cap_reset), "cap_trim")
         e = usd + units * P[i]
         eq[i], un[i] = e, units
         ex[i] = sgn * units * P[i]
@@ -137,7 +143,7 @@ def run_balance(price, r_usd, r_asset, target, cost_one_way, markup_annual, star
     eqs = pd.Series(eq, idx)
     return BalanceResult(eqs, pd.Series(ex, idx), pd.Series(ex, idx) / eqs, pd.Series(un, idx), pd.Series(over, idx), tr,
                          {"engine": ENGINE_VERSION, "cost_one_way": cost_one_way, "markup_annual": markup_annual,
-                          "max_x": max_x, "lag": lag, "band": band, "cap_tolerance": cap_tolerance, "invert": invert,
+                          "max_x": max_x, "lag": lag, "band": band, "cap_tolerance": cap_tolerance, "cap_reset": cap_reset, "invert": invert,
                           "basis_usd": basis_usd, "basis_asset": basis_asset})
 
 

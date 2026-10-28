@@ -69,7 +69,7 @@ def run(engine, tg, m):
         true_changes = int((tr["from"] != tr["to"]).sum())
         kinds = {"all trades": counted}
     else:
-        r = run_balance(d["spot"], d["tbill"], d["jp1"], tg, COST * m, MARKUP * m, 10000, max_x=1.0, lag=1, band=0.0, cap_tolerance=0.0,
+        r = run_balance(d["spot"], d["tbill"], d["jp1"], tg, COST * m, MARKUP * m, 10000, max_x=1.0, lag=1, band=0.0, cap_tolerance=0.0, cap_reset=None,
                         invert=True, start=IS0, end=END)
         expo = r.exposure_x
         hold = holding_days(r)

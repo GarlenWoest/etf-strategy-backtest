@@ -6,7 +6,7 @@ import pytest
 
 from src.fx_engine import run_fx
 from src import load_config
-from src.fx_engine_v2 import DEFAULT_BAND, DEFAULT_CAP_TOLERANCE, holding_days, position_changes, trade_counts
+from src.fx_engine_v2 import DEFAULT_BAND, DEFAULT_CAP_RESET, DEFAULT_CAP_TOLERANCE, holding_days, position_changes, trade_counts
 from src.fx_engine_v2 import run_balance as _run_balance
 
 
@@ -14,6 +14,7 @@ def run_balance(*a, **k):
     """The mechanics tests below switch both tolerances off unless they set them; the defaults are tested separately."""
     k.setdefault("band", 0.0)
     k.setdefault("cap_tolerance", 0.0)
+    k.setdefault("cap_reset", None)
     return _run_balance(*a, **k)
 
 IDX = pd.bdate_range("2010-01-04", periods=30)
@@ -170,8 +171,38 @@ def test_cap_tolerance_reduces_trims_and_bounds_exposure():
 
 def test_approved_defaults_match_config_and_apply():
     c = load_config()["specialists"]["engine_v2"]
-    assert (DEFAULT_BAND, DEFAULT_CAP_TOLERANCE) == (c["band"], c["cap_tolerance"]) == (0.10, 0.05)
+    assert (DEFAULT_BAND, DEFAULT_CAP_TOLERANCE, DEFAULT_CAP_RESET) == (c["band"], c["cap_tolerance"], c["cap_reset"]) \
+        == (0.10, 0.0, 0.95)
     s = series(np.linspace(100, 70, 30))
     r = _run_balance(s, zero(), zero(), decide(d0=1.0), 0.001, 0.0, 10000, invert=True)
-    assert r.meta["band"] == 0.10 and r.meta["cap_tolerance"] == 0.05
-    assert (r.exposure_x.abs() <= 1.05 + 1e-12).all()
+    assert r.meta["band"] == 0.10 and r.meta["cap_tolerance"] == 0.0 and r.meta["cap_reset"] == 0.95
+    assert (r.exposure_x.abs() <= 1.0 + 1e-12).all()
+    trims = r.trades[r.trades["kind"] == "cap_trim"]
+    assert len(trims) > 0 and np.allclose(trims["to_x"].abs(), 0.95)
+
+
+@pytest.mark.parametrize("seed", range(12))
+@pytest.mark.parametrize("invert", [True, False])
+def test_hard_cap_never_exceeded_at_any_close_with_defaults(seed, invert):
+    """User decision 2026-10-28: 1x is a HARD limit. Random paths (incl. jumps), random weekly targets in [-1, 1],
+    random rates and costs: with the approved defaults no close may show |exposure| above 1.00x equity."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2000-01-03", periods=600)
+    ret = rng.normal(0, 0.012, len(idx))
+    ret[rng.integers(0, len(idx), 6)] += rng.choice([-0.08, 0.08], 6)            # occasional 8% jumps
+    px = pd.Series(100 * np.exp(np.cumsum(ret)), index=idx)
+    tg = pd.Series(np.nan, index=idx)
+    tg.iloc[::5] = rng.choice([-1.0, -0.5, 0.0, 0.5, 1.0], len(tg.iloc[::5]))
+    ru = pd.Series(rng.uniform(0, 0.06), index=idx)
+    ra = pd.Series(rng.uniform(-0.01, 0.05), index=idx)
+    r = _run_balance(px, ru, ra, tg, 0.0002, 0.0075, 10000, invert=invert)
+    assert r.exposure_x.abs().max() <= 1.0 + 1e-9
+    trims = r.trades[r.trades["kind"] == "cap_trim"]
+    assert np.allclose(trims["to_x"].abs(), 0.95)
+    assert (r.trades["cost_usd"] >= 0).all() and abs(r.trades["cost_usd"].sum() -
+                                                  0.0002 * r.trades["usd_traded"].sum()) < 1e-6   # every rebalance costed
+
+
+def test_cap_reset_validation():
+    with pytest.raises(ValueError):
+        _run_balance(series(100.0), zero(), zero(), decide(d0=1.0), 0.0, 0.0, 10000, cap_reset=1.2)
