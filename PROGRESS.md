@@ -9,7 +9,23 @@ _Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, d
 - **Brokers:** if live bid/ask needs a broker login, list the options instead of setting anything up.
 - **Commits:** commit locally after each phase; don't push.
 
-**Phase B, read-only current-market intelligence: DONE, awaiting approval.** Report: `reports/phaseB_market_intel.md`.
+**Phase C, official economic event monitoring: DONE, awaiting approval.** Report: `reports/phaseC_events.md`.
+- **Code:** `src/events.py`, `tools/events.py poll`. Plain Python, official sources only; writes only `live/events/`; idempotent; 198 tests pass.
+- **Sources:**
+  - Fed (calendar with times, press feed, verbatim statement facts);
+  - BEA schedule;
+  - BLS calendar and Atom feeds (identified per BLS policy with `BLS_CONTACT_EMAIL`, approved 10-28; the address is in no written file);
+  - BoJ schedule (date only) and feed; ONS calendar; MoF intervention releases.
+  - The BoE is blocked.
+- **BLS checks:** all 55 feed entries in range match a calendar event. Feed timestamps are 39–40 min early for 17 of them, so the official times are used.
+- **FOMC 10-28:**
+  - verified 2:00 p.m. statement and 2:30 p.m. press conference;
+  - fact: "maintain the target range ... at 3-3/4 to 4 percent" (previous 3.75–4.00);
+  - indicative reactions recorded, not attributed;
+  - no consensus, so no surprise.
+- **Decisions pending:** the weekday-task change (snapshot step 2b; optional event poll step 2c), shown as a diff and not saved.
+
+**Phase B, read-only current-market intelligence: DONE, approved 2026-10-28.** Report: `reports/phaseB_market_intel.md`.
 - **Code:**
   - `src/market_intel.py` (logic), `tools/market_intel.py snapshot|verify`, `config.yaml market_intel`;
   - 13 new tests; 184 tests pass.

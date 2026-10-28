@@ -179,6 +179,7 @@ specialists:                        # Expansion (user decisions 2026-10-23); see
   research_paused: true             # user 2026-10-26: no new hypotheses for any market until the user decides; monitoring and paper books continue
   monitoring: [gold, gbpusd]        # research and monitoring mode only
   rule_amendments:
+    bls_contact: "user approval 2026-10-28: identify the event monitor to bls.gov only (BLS robot policy) with the address in the environment variable BLS_CONTACT_EMAIL; the address is never written to config, committed files, logs, caches or reports; BLS is reported BLOCKED while it is unset"
     rule1_fred_key: "a read-only FRED/ALFRED API key is allowed, read only from the environment variable FRED_API_KEY; never printed, logged, written to files or committed; the user sets it"
   holiday_calendars: rule_based     # no new dependency
   publication: "new code and the source library (citations plus our own summaries) may be public; data/, live/, paper/, briefs/ stay private"

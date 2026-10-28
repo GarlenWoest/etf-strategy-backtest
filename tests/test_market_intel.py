@@ -129,7 +129,8 @@ def _imports(path):
 
 def test_isolation_research_code_never_uses_market_intel_or_live():
     """Monitoring must not leak into research: no src/ module or research tool imports market_intel or reads live/."""
-    allowed = {"tools/market_intel.py", "src/market_intel.py"}
+    allowed = {"tools/market_intel.py", "src/market_intel.py",      # monitoring modules (current data, live/ only)
+               "tools/events.py", "src/events.py"}
     offenders = []
     for p in list((PROJECT_ROOT / "src").rglob("*.py")) + list((PROJECT_ROOT / "tools").glob("*.py")):
         rel = str(p.relative_to(PROJECT_ROOT))
