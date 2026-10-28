@@ -9,7 +9,15 @@ _Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, d
 - **Brokers:** if live bid/ask needs a broker login, list the options instead of setting anything up.
 - **Commits:** commit locally after each phase; don't push.
 
-**Phase C, official economic event monitoring: DONE, awaiting approval.** Report: `reports/phaseC_events.md`.
+**Phase D, HistData pilot without TrueFX: DONE, awaiting approval.** Report: `reports/phaseD_histdata.md`.
+- **Separate-year test (2018, fixed before reading the data):** reading C **FAILS (9/12)**. The 2018 data uses New York local time instead (exploratory: 12/12 discriminating days; 0 weekend ticks).
+- **The convention changed between Nov 2018 and Mar 2019,** so every year must be tested before use.
+- **The 2019 "out-of-order row"** is a duplicated hour (2,360 identical rows); exact duplicates are now dropped.
+- **Stale stretches and large moves** are described; their confirmation, and Q4, stay **BLOCKED** on TrueFX.
+- **Spreads** halved from 2018 to 2019 (indicative, not costs). Fingerprints are reproducible.
+- 205 tests pass. The weekday task now runs steps 2b (snapshot) and 2c (event poll), saved after review on 10-28.
+
+**Phase C, official economic event monitoring: DONE, approved 2026-10-28** (BLS identified via `BLS_CONTACT_EMAIL`; first poll ok). Report: `reports/phaseC_events.md`.
 - **Code:** `src/events.py`, `tools/events.py poll`. Plain Python, official sources only; writes only `live/events/`; idempotent; 198 tests pass.
 - **Sources:**
   - Fed (calendar with times, press feed, verbatim statement facts);
