@@ -1,8 +1,15 @@
 # PROGRESS
 
-_Last updated: 2026-10-28 (Phases A–H done; public repo pushed; private backup working; research pause for strategies still active)_
+_Last updated: 2026-10-28 evening (new development phase: Phase A re-verification done; Phase B waits for the 10-29 run; research pause for strategies still active)_
 
 ## Current phase
+### Next development phase (user instruction 2026-10-28 evening): independent validation, market intelligence, trading readiness
+- **Execution limits:** Phases A and B only this session, stopping after each for approval. Phase B must use the actual 10-29 16:45 ET weekday run. At most one new report per phase. Before Phase D, propose a lightweight arithmetic reference; NautilusTrader or LEAN need separate approval. Commit locally; don't push.
+- **Phase A, baseline re-verification: DONE, awaiting approval.** Section 7 of `reports/phaseA_project_audit.md`.
+  - All overview figures confirmed. Local is 3 commits ahead of GitHub, 0 behind.
+  - The 10-28 run used the old prompt and code; **the 10-29 run (16:48 ET) is the first with all new steps and hasn't happened yet.**
+  - New findings: non-atomic state writes; the paper update isn't crash-safe (values and trades appended before the state is saved); step results are self-reported; no tests for interrupted writes, retry or restart recovery.
+
 ### Publishing and backup status (verified 2026-10-28)
 - **Public repo** (GarlenWoest/etf-strategy-backtest): pushed by the user.
   - GitHub main = local `3c51573`.

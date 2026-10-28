@@ -66,3 +66,42 @@ Each run is a Claude session, not a plain script. The heartbeat records "started
 ## 6. Change made in Phase A
 
 - `tools/pilot_histdata.py` and `reports/data_quality/histdata_usdjpy_2019_pilot.md`: the Q3 detail table now shows only the difference from the H.10 rate, not HistData's quotes. This was a report-only edit; no results changed.
+
+## 7. Re-verification for the next development phase (2026-10-28, 19:15 ET)
+
+_Read only. Nothing was changed apart from this section, PROGRESS.md and one memory-ledger record._
+
+**Baseline figures (PROJECT_OVERVIEW, 10-28) vs the repository: all confirmed.**
+
+| Figure | Evidence | Result |
+|---|---|---|
+| 142 trials, V001–V142 | `research_log.csv`: 142 PRE-REGISTERED IDs; 140 KILLED; PASS only V119, V122 | Confirmed |
+| 1,125 log rows | 1,125 data rows | Confirmed |
+| 217 tests | `pytest tests`: 217 passed (3 pandas deprecation warnings) | Confirmed |
+| 83 memory records | `Ledger.verify()` intact; 83 lines | Confirmed (84 after this record) |
+| Library 234 / 190 kept; L0 207, L1 16, L2 5, L3 6 | `research/library/audit.csv` | Confirmed |
+| 133 events (63 / 25 / 45) | `live/events/events.json`, generated 21:20 UTC; BoE BLOCKED (403) | Confirmed |
+| Engine v2 hard 1x | `config.yaml`: band 0.10, cap_tolerance 0.0, cap_reset 0.95; randomized hard-cap test passes | Confirmed |
+| Holdout locked | `holdout_locked: true`; all 90 CSV files under `data/` end by 2023-12-31; HistData zips are 2018 and 2019 only | Confirmed |
+| Separation | Tests present: `test_events.py::test_isolation_and_write_guard`, `test_market_intel.py` isolation tests, holdout tests in `test_config.py` and `test_data.py` | Confirmed |
+| TrueFX files | `data/raw/truefx/` does not exist | Still blocked |
+
+**Git.**
+- One branch (`main`); working tree clean.
+- GitHub main is `3c51573`, both by `ls-remote` and after a fresh fetch.
+- Local main is **3 commits ahead, 0 behind**: `f3d1866` (backup status), `2a1d8f6` and `15b0b11` (overview). Nothing to reconcile; all three are safe to push when you choose.
+
+**Scheduled tasks (the app's own records).**
+- **watchlist-alerts:** weekdays 16:45 ET plus up to 216 s jitter. 5 runs, all "succeeded": a 10-22 setup run, then 10-23, 10-26, 10-27 and 10-28. Next run: **2026-10-29 16:48:36 ET**.
+- **weekly-market-brief:** Sundays 18:00 ET plus up to 114 s. 2 runs, both "succeeded" (10-22 setup, 10-25). Next run: 11-01.
+- **The 10-28 weekday run started at 17:05:00 ET,** about 16 minutes after its latest jittered start. The cause wasn't determined; the heartbeat doesn't count it as late, because its "late" threshold is 18:00.
+- **That run used the old prompt and code.** The new prompts and the exposure code were committed at 18:11–18:15 ET. So it recorded no steps, ran no snapshot or event poll, and computed no exposure. Its transcript says the paper update "printed nothing", but the files show it did write the 10-28 values (17:05:14).
+- **The first run with every new step is 10-29. It hasn't happened yet**, so Phase B cannot start.
+
+**New findings (not fixed; for Phase B).**
+1. **Writes aren't atomic.** `paper/state.json`, `live/heartbeat.json`, `live/state.json`, `live/events/events.json` and `live/intel/latest.json` are all written in place with `write_text`. An interruption mid-write can leave a truncated file, which the next run can't read.
+2. **The paper update's write order isn't crash-safe.** Daily values are appended to `values.csv` inside the day loop, and `trades.csv` after it, but `state.json` (including `last_update`) is saved once at the end. A crash in between makes the next run reprocess those days, giving duplicate value rows and possibly repeated fills. This hasn't been observed, and no test covers it.
+3. **Step results are self-reported.** The heartbeat's step records are written by the Claude session from what it saw. The scripts don't record their own outcome. `paper_books.py update` prints nothing on a normal successful update, so the record can't tell a real update from a silent no-op.
+4. **Test coverage gaps.** Already covered: event idempotence, duplicate tick rows, missing prices and bars, the market-hours refusal, gap alerts, backup allowlist and failures, freshness statuses. **Not covered:** interrupted writes, a crash between writes, retry after failure, recovery after an app restart, and an end-to-end run on stale data.
+
+**Already done; not repeated** (per your limits): the GitHub audit (Phase G: adopt nothing now), the library audit (Phase F), the event monitor, the hard 1x cap, the 10-26 notification diagnosis, and the Book B stop-rule decision.
