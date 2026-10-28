@@ -187,6 +187,13 @@ specialists:                        # Expansion (user decisions 2026-10-23); see
     band: 0.10                      # user-approved 2026-10-26: re-size at a decision only if exposure is > 10% of equity off target
     cap_tolerance: 0.05             # user-approved 2026-10-26: trim only above 1.05 x max_gross_notional_x, back to exactly max
     fixed_before_preregistration: true   # any new pre-registration uses these values unless the user changes them first
+  data_quality:                     # intraday data tests (reports/data_vendor_comparison.md section 5)
+    q2_timezone_rule:               # user-approved 2026-10-28; FIXED before any year other than 2019 is tested
+      event: "BLS Employment Situation release, 08:30:00 America/New_York"
+      jump: "first tick-to-tick mid move >= 3 pips (USD/JPY: 0.03 yen)"
+      window_seconds_after_release: [0, 5]
+      required: "11 of 12 releases per calendar year (a release with no jump in the window counts as a miss)"
+      applies_to: "every future year and vendor; the 2019 HistData pilot keeps its pre-set minute-rule verdict (FAIL) on record"
   ledgers:
     gold:   {virtual_usd: 100,   max_gross_notional_x: 1.0, vehicle: GLD}
     usdjpy: {virtual_usd: 10000, max_gross_notional_x: 1.0, report: ["percent", "per_100_usd"]}

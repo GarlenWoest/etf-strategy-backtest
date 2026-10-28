@@ -23,6 +23,8 @@ Goal: fix the research infrastructure before any new hypothesis. There are 7 pri
   - Q1 conditional; Q3, Q5, Q6, Q7, Q9 pass;
   - Q2 fails (the documented reading, and the corrected reading under the pre-set minute rule, 9 of 12);
   - Q4 and Q8 are pending until the TrueFX files arrive.
+- **Decided 2026-10-28:** the per-second payroll rule (jump within 0–5 s after 08:30:00 New York, 11 of 12 required) is the Q2 rule for all future years. It's recorded in `config.yaml specialists.data_quality` before any other year was tested.
+- **TrueFX files:** on 2026-10-28 `data/raw/truefx/` did not exist, and no USD/JPY 2019 files were found on the disk. Q4 and Q8 are still pending.
 - **Next:**
   - you download the TrueFX USD/JPY 2019 monthly files to `data/raw/truefx/`, and I rerun the pilot;
   - Dukascopy email draft: `research/DUKASCOPY_EMAIL_DRAFT.md` (not sent);
@@ -60,7 +62,7 @@ Goal: fix the research infrastructure before any new hypothesis. There are 7 pri
 - **Decided 2026-10-26 (user):**
   - engine v2 defaults are band 0.10 and cap_tolerance 0.05, fixed before any new pre-registration (`config.yaml specialists.engine_v2`);
   - the paper-script fixes P1 and P2 are implemented with tests.
-- **Tests:** 146 pass. The memory ledger has 48 records, chain intact.
+- **Tests:** 146 pass. The memory ledger has 49 records, chain intact.
 - **Today's scheduled run executed and was verified:**
   - 16:49:01–16:49:15 ET, status ok;
   - all 4 opening orders filled, and the fill prices match a fresh Yahoo download;
