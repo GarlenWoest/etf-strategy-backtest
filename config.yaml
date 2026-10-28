@@ -243,7 +243,7 @@ market_intel:                       # Phase B (2026-10-28): READ-ONLY current-ma
         - {source: yahoo, symbol: "GC=F", kind: exchange_delayed_1m, quote: "COMEX gold futures, front contract (USD per oz); differs from spot by basis and rolls; Yahoo declares a 10-min delay", session: cme_metals}
       unavailable: "XAU/USD spot: no licensed free real-time source (LBMA prices need an IBA licence); never inferred from GLD or GC=F"
   executable_quotes: "DEFERRED (user 2026-10-28): indicative prices only until a pre-registered hypothesis needs real spreads; OANDA practice account is the first option to revisit"
-  schedule: "option B (user 2026-10-28): run tools/market_intel.py snapshot as a step of the weekday 16:45 task (pending the user's review of the task change)"
+  schedule: "user 2026-10-28: weekday 16:45 task step 2b runs tools/market_intel.py snapshot and step 2c runs tools/events.py poll (saved after review)"
 
 usdjpy_study1:                      # FX study 1 (USD/JPY specialist). FROZEN at pre-registration: V135-V142
   frozen: true
