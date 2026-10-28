@@ -5,7 +5,7 @@ their own line (embedded as figures), **bold**, _italic_, `code` and [links](url
 it go on a title page; later pages are numbered "Page n of N" in the footer (CSS page-margin boxes).
 Intermediate files (HTML, Chrome profile) go to tmp/ inside the project.
 
-Usage: .venv/bin/python -I tools/md_to_pdf.py SUMMARY.md SUMMARY.pdf
+Usage: .venv/bin/python -I tools/md_to_pdf.py SUMMARY.md SUMMARY.pdf ["Title-page label"]  (default "Project summary")
 """
 import html
 import re
@@ -86,7 +86,7 @@ def bullets(lines):
     return "\n".join(out)
 
 
-def convert(md, base):
+def convert(md, base, label="Project summary"):
     lines = md.splitlines()
     body, i = [], 0
     title = sub = None
@@ -140,14 +140,14 @@ def convert(md, base):
         body.append("<p>%s</p>" % inline(" ".join(x.strip() for x in lines[i:j])))
         i = j
     tp = ('<section class="title-page"><div class="kicker">trading-research</div><h1>%s</h1>%s'
-          '<div class="meta">Project summary &middot; %s<br>Garlen Woest</div></section>' % (
+          '<div class="meta">%s &middot; %s<br>Garlen Woest</div></section>' % (
               inline(title or "Summary"), '<div class="sub">%s</div>' % inline(sub) if sub else "",
-              date.today().strftime("%B %-d, %Y")))
+              html.escape(label), date.today().strftime("%B %-d, %Y")))
     return "<!doctype html><html><head><meta charset='utf-8'><title>%s</title><style>%s</style></head><body>%s\n%s</body></html>" % (
         html.escape(title or "Summary"), CSS, tp, "\n".join(body))
 
 
-def main(src, dst):
+def main(src, dst, label="Project summary"):
     src, dst = (ROOT / src).resolve(), (ROOT / dst).resolve()
     for p in (src, dst):
         if not str(p).startswith(str(ROOT)):
@@ -155,7 +155,7 @@ def main(src, dst):
     tmp = ROOT / "tmp" / "pdf_build"
     tmp.mkdir(parents=True, exist_ok=True)
     page = tmp / (src.stem + ".html")
-    page.write_text(convert(src.read_text(), src.parent))
+    page.write_text(convert(src.read_text(), src.parent, label))
     r = subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
                         "--user-data-dir=%s" % (tmp / "chrome-profile"), "--no-pdf-header-footer",
                         "--print-to-pdf=%s" % dst, page.as_uri()], capture_output=True, text=True, timeout=120)
@@ -165,4 +165,4 @@ def main(src, dst):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(*sys.argv[1:4])
