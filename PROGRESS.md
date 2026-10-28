@@ -9,6 +9,20 @@ _Last updated: 2026-10-26 (research-quality phase, Priorities 1–2 of 7 done, d
 - **Brokers:** if live bid/ask needs a broker login, list the options instead of setting anything up.
 - **Commits:** commit locally after each phase; don't push.
 
+**Phase B, read-only current-market intelligence: DONE, awaiting approval.** Report: `reports/phaseB_market_intel.md`.
+- **Code:**
+  - `src/market_intel.py` (logic), `tools/market_intel.py snapshot|verify`, `config.yaml market_intel`;
+  - 13 new tests; 184 tests pass.
+- **Every observation** carries its source, quote type, source and retrieval timestamps (UTC), source zone, age, expected update and a freshness status.
+- **Specialist verdicts:** DATA OK / STALE MARKET DATA / INSUFFICIENT DATA.
+- **First snapshot:** all three specialists DATA OK. Yahoo FX bid/ask fields are rejected as inconsistent. The gold reference is GLD; GC=F is context only; XAU/USD spot is unavailable.
+- **Accuracy at documented reference times, 10-20..28** (`reports/market_intel/accuracy_2026-10-28.md`): Yahoo vs ECB and Fed H.10 agree within 2.1 pips (USD/JPY, 11 comparisons) and 3.6 pips (GBP/USD, 11). Missing 1-minute bars: about 2%. Executable prices, spreads, latency and gold can't be verified.
+- **Decisions pending:**
+  - an executable bid/ask source (OANDA practice, IBKR, Massive $49/month, or none);
+  - how to run `snapshot` regularly (launchd plain Python, the weekday task, a new Claude task, or cloud);
+  - running the history rewrite (commands shown; dry run verified).
+- **Isolation:** writes only to `live/intel/` and aggregate reports; tests block research code from importing it.
+
 **Phase A decisions (user, 2026-10-28):**
 1. **1x is a HARD limit.** v2 defaults are now cap_tolerance 0.0 and cap_reset 0.95 (band 0.10 unchanged). Engine 1.2; 171 tests pass, including 24 randomized no-close-above-1.00x tests.
 2. **History rewrite:** remove the 5 HistData quotes from the unpushed history; commands to be shown first.

@@ -205,6 +205,43 @@ specialists:                        # Expansion (user decisions 2026-10-23); see
     cumulative_trials_before: 134   # next trial id V135
     note: "single-pair evidence is weaker than multi-currency portfolio evidence; say so in every report"
 
+market_intel:                       # Phase B (2026-10-28): READ-ONLY current-market observations. Monitoring, not research.
+  isolation: "writes only live/intel/ (git-ignored); no research module may import src.market_intel or read live/; nothing here may enter data/, research_log.csv or any study"
+  status_words: {fresh: [LIVE, DELAYED, CLOSED_LAST_PRICE, CURRENT], bad: [STALE, UNAVAILABLE]}
+  specialist_status: {ok: "DATA OK", stale: "STALE MARKET DATA", missing: "INSUFFICIENT DATA"}
+  freshness:                        # per observation kind; ages in seconds unless stated
+    fx_indicative_1m:               # Yahoo JPY=X / GBPUSD=X last price (indicative, unofficial client, NOT executable)
+      expected_update_s: 60
+      live_max_age_s: 180
+      delayed_max_age_s: 1200
+      closed_tolerance_s: 900       # market closed: last price must be within 15 min before the close
+      session: fx                   # Sun 17:00 - Fri 17:00 New York (src/clock.fx_market_open)
+    exchange_delayed_1m:            # GLD (NYSE Arca) and GC=F (COMEX via CME Globex), as reported by Yahoo
+      expected_update_s: 60
+      live_max_age_s: 180           # added to the source's declared delay (exchangeDataDelayedBy)
+      delayed_max_age_s: 1200
+      closed_tolerance_s: 900
+    daily_close:                    # last completed daily bar used for volatility
+      max_age_business_days: 2
+    ecb_reference:                  # ECB euro reference rates: concertation ~14:10 CET, published ~16:00 CET on TARGET days
+      max_age_calendar_days: 4
+    fed_h10_weekly:                 # Fed H.10 noon buying rates in New York, published weekly (Mondays)
+      max_age_calendar_days: 12
+  volatility: {window_days: 20, min_closes: 21, annualisation_days: 252}
+  instruments:
+    usdjpy:
+      primary: {source: yahoo, symbol: "JPY=X", kind: fx_indicative_1m, quote: "indicative last price; Yahoo bid/ask fields rejected (inconsistent with last, 2026-10-28)", pip: 0.01}
+      references: {ecb: "EUR/JPY divided by EUR/USD (cross), ~14:10 CET", fed_h10: "FRED DEXJPUS, noon buying rate NY (yen per USD)"}
+    gbpusd:
+      primary: {source: yahoo, symbol: "GBPUSD=X", kind: fx_indicative_1m, quote: "indicative last price; Yahoo bid/ask fields rejected (bid above ask, 2026-10-28)", pip: 0.0001}
+      references: {ecb: "EUR/USD divided by EUR/GBP (cross), ~14:10 CET", fed_h10: "FRED DEXUSUK, noon buying rate NY (USD per GBP)"}
+    gold:
+      reference_instrument: GLD     # the gold ledger's vehicle (specialists.ledgers.gold); NYSE Arca, 09:30-16:00 ET
+      primary: {source: yahoo, symbol: "GLD", kind: exchange_delayed_1m, quote: "ETF last trade in USD per share; gold per share is below 0.1 oz and falls over time by the fund expense ratio (exact ratio: sponsor NAV, not checked)", session: nyse}
+      context:
+        - {source: yahoo, symbol: "GC=F", kind: exchange_delayed_1m, quote: "COMEX gold futures, front contract (USD per oz); differs from spot by basis and rolls; Yahoo declares a 10-min delay", session: cme_metals}
+      unavailable: "XAU/USD spot: no licensed free real-time source (LBMA prices need an IBA licence); never inferred from GLD or GC=F"
+
 usdjpy_study1:                      # FX study 1 (USD/JPY specialist). FROZEN at pre-registration: V135-V142
   frozen: true
   document: research/USDJPY_PREREGISTRATION.md
