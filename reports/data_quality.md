@@ -64,8 +64,8 @@ Checked: duplicate dates, NaN prices, zero or negative prices, OHLC consistency,
 | TMF | gap_prev_close_to_open | 3 | 2020-03-06, 2020-03-09, 2020-03-16 | flag only, kept (>10%) |
 
 **Suspected stale prices (flagged, not changed):**
-- QQQ closed at exactly 68.40 (unadjusted) on 2012-08-27, -28 and -29, with different volumes and ranges each day. On 08-29 the open also equals that close.
-- UGL closed at exactly 9.7925 on 2018-05-18, -21 and -22, with different volumes.
+- QQQ showed the same unadjusted close on three consecutive days (2012-08-27, -28 and -29), with different volumes and ranges each day. On 08-29 the open also equals that close.
+- UGL showed the same close on three consecutive trading days (2018-05-18, -21 and -22), with different volumes.
 - Both look like Yahoo data errors. **Status: UNRESOLVED.** No second source was available, so they could not be confirmed or fixed, and the clean data keeps Yahoo's values unchanged.
 - **Phase 5 safeguard (user instruction):** every surviving strategy is run twice: once as is, and once with closes in these windows (QQQ 2012-08-27 to 2012-08-29, UGL 2018-05-18 to 2018-05-22) replaced by linear interpolation between the neighboring good closes (`src/data.interpolate_suspects`). Any change in results is reported.
 

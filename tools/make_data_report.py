@@ -74,9 +74,9 @@ for i in build["issues"]:
     w("| %s | %s | %d | %s | %s |" % (i["ticker"], i["check"], i["count"], ", ".join(i["dates"][:6]) +
                                      (" ..." if i["count"] > 6 else ""), i["detail"]))
 w("\n**Suspected stale prices (flagged, not changed):**")
-w("- QQQ closed at exactly 68.40 (unadjusted) on 2012-08-27, -28 and -29, with different volumes and ranges each day. "
+w("- QQQ showed the same unadjusted close on three consecutive days (2012-08-27, -28 and -29), with different volumes and ranges each day. "
   "On 08-29 the open also equals that close.")
-w("- UGL closed at exactly 9.7925 on 2018-05-18, -21 and -22, with different volumes.")
+w("- UGL showed the same close on three consecutive trading days (2018-05-18, -21 and -22), with different volumes.")
 w("- Both look like Yahoo data errors. **Status: UNRESOLVED.** No second source was available, so they could not "
   "be confirmed or fixed, and the clean data keeps Yahoo's values unchanged.")
 w("- **Phase 5 safeguard (user instruction):** every surviving strategy is run twice: once as is, and once with "
