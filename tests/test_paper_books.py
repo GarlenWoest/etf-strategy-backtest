@@ -241,3 +241,16 @@ def test_stop_is_checked_at_the_close_and_filled_at_the_next_open_not_the_stop(p
     assert list(sells["date"]) == ["2026-11-02"]                    # not 10-29: the stop waits for the minimum hold
     fill = float(sells["price_incl_costs"].iloc[0])
     assert fill < 348 and abs(fill - 338.0 * (1 - 0.0007)) < 1e-3     # next open (gapped) less costs, not 348
+
+
+def test_economic_exposure_reported_in_summary(paper):
+    """Reporting only (user 2026-10-28): leveraged ETFs count at their stated multiple; rules unchanged."""
+    J(paper, "2026-10-25", action="BUY", instrument="TQQQ", size_pct=50, exit_rule={"exit_on_or_after": "2026-11-06"})
+    PB.update(paper, START)
+    ex = paper.load()["exposure"]
+    assert ex["as_of"] == "2026-10-26"
+    assert abs(ex["SPY"] - 1.0) < 1e-9 and abs(ex["MIX"] - 1.0) < 1e-9
+    assert 1.40 < ex["B"] < 1.60                       # 50% in a 3x ETF (prices move between open and close)
+    assert 0.90 < ex["A"] < 1.10                       # V122 0.5x of its sleeve, V074 1.5x of its sleeve
+    t = PB.table(paper)
+    assert "Economic exposure" in t and "~%.2fx" % ex["B"] in t and "applies to new FX research only" in t

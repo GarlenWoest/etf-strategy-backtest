@@ -44,6 +44,9 @@ LEVERAGED = {"UGL", "AGQ", "UCO", "UPRO", "TQQQ", "TMF"}
 B_UNIVERSE = ["GLD", "SLV", "USO", "SPY", "QQQ", "TLT"] + sorted(LEVERAGED)
 A_INSTR = ["VTI", "IEF", "DBC", "GLD", "UGL", "UPRO", "TQQQ", "TMF"]
 COST = {"unlev": 0.0007, "lev": 0.0010}
+# Stated daily leverage of the leveraged ETFs (UGL gold, AGQ silver, UCO crude: 2x; UPRO S&P 500, TQQQ Nasdaq-100,
+# TMF 20+y Treasuries: 3x). Used only to REPORT economic exposure (user 2026-10-28); the books' rules are frozen.
+LEVERAGE = {"UGL": 2.0, "AGQ": 2.0, "UCO": 2.0, "UPRO": 3.0, "TQQQ": 3.0, "TMF": 3.0}
 MIN_HOLD = 5
 BOOKS = ["A", "B", "SPY", "MIX"]
 
@@ -131,6 +134,13 @@ def download(tickers, start):
 
 def value_of(book, px):
     return book["cash"] + sum(sh * px[t] for t, sh in book["shares"].items())
+
+
+def exposure(books, px):
+    """Economic exposure as a multiple of the books' combined value: sum(holding value x stated leverage) / value."""
+    val = sum(value_of(b, px) for b in books)
+    num = sum(sh * px[t] * LEVERAGE.get(t, 1.0) for b in books for t, sh in b["shares"].items())
+    return num / val if val > 0 else 0.0
 
 
 def trade_to(book, weights, opens, d, tag, log):
@@ -297,6 +307,9 @@ def update(p, today):
                 "B": value_of(s["books"]["B"], closes), "SPY": value_of(s["books"]["SPY"], closes),
                 "MIX": value_of(s["books"]["MIX"], closes)}
         p.append_csv(p.values, ["date"] + list(vals), {"date": d.isoformat(), **{k: "%.4f" % v for k, v in vals.items()}})
+        B = s["books"]
+        s["exposure"] = {"as_of": d.isoformat(), "A": exposure([B["A"]["V122"], B["A"]["V074"]], closes),
+                         "B": exposure([B["B"]], closes), "SPY": exposure([B["SPY"]], closes), "MIX": exposure([B["MIX"]], closes)}
         # after the close: new orders for the next trading day
         nxt = next_trading_day(d).isoformat()
         try:
@@ -506,11 +519,16 @@ def table(p):
     rows = [("Book A (rules: V122 + V074)", "A"), ("Book B (discretionary)", "B"), ("Benchmark: SPY", "SPY"),
             ("Benchmark: 70/30 SPY/GLD", "MIX")]
     L = ["**%s** — since %s, %d trading days, through %s\n" % (LABEL, v["date"].iloc[0], len(v), v["date"].iloc[-1]),
-         "| Book | Value | Return since start | Max drawdown |", "|---|---|---|---|"]
+         "| Book | Value | Return since start | Max drawdown | Economic exposure |", "|---|---|---|---|---|"]
+    ex = p.load().get("exposure") or {}
     for name, c in rows:
         x = v[c].astype(float)
-        L.append("| %s | $%.2f | %+.2f%% | %.2f%% |" % (name, x.iloc[-1], 100 * (x.iloc[-1] / 100 - 1),
-                                                     100 * float((x / x.cummax().clip(lower=100) - 1).min())))
+        e = ("~%.2fx" % ex[c]) if c in ex else "not yet computed (next update)"
+        L.append("| %s | $%.2f | %+.2f%% | %.2f%% | %s |" % (name, x.iloc[-1], 100 * (x.iloc[-1] / 100 - 1),
+                                                          100 * float((x / x.cummax().clip(lower=100) - 1).min()), e))
+    L.append("\nEconomic exposure = holdings x stated ETF leverage (2x/3x funds counted at 2x/3x) / book value, at the %s close; "
+             "no margin is used. The hard 1x limit applies to new FX research only, not to these frozen paper books." % (
+                 ex.get("as_of", "next")))
     return "\n".join(L)
 
 
