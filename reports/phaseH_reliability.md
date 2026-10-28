@@ -60,7 +60,7 @@ Nothing has been enabled.
 
 ## 4. Backups
 
-- **Public repository** (`origin` = GarlenWoest/etf-strategy-backtest, main = `92234a2`): 30 local commits are unpushed.
+- **Public repository** (`origin` = GarlenWoest/etf-strategy-backtest, main = `92234a2`): 29 local commits are unpushed (as of this report).
   - Tracked files: code, reports and our own logs; no `data/`, `paper/`, `live/`, `briefs/`, `results/`, `tmp/`.
   - Verified absent from history: the BLS contact address (0 objects) and the HistData quotes (0 objects).
   - **Still in history:** a few raw Yahoo prices in `reports/infrastructure_audit.md` (watchlist fills and signal closes, today's fill opens, Book B's fill). Decision for you before pushing.
