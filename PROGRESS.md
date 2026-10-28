@@ -5,7 +5,11 @@ _Last updated: 2026-10-28 evening (new development phase: Phase A re-verificatio
 ## Current phase
 ### Next development phase (user instruction 2026-10-28 evening): independent validation, market intelligence, trading readiness
 - **Execution limits:** Phases A and B only this session, stopping after each for approval. Phase B must use the actual 10-29 16:45 ET weekday run. At most one new report per phase. Before Phase D, propose a lightweight arithmetic reference; NautilusTrader or LEAN need separate approval. Commit locally; don't push.
-- **Phase A, baseline re-verification: DONE, awaiting approval.** Section 7 of `reports/phaseA_project_audit.md`.
+- **While waiting for the 10-29 run (user-approved, 10-28 evening; no script changes):**
+  - **Backup restore test: PASS** (`reports/phaseH_reliability.md` section 5). All 16 files restored byte-identical; journal fingerprint matches; fsck clean; GitHub 404 without login.
+  - **Five USD/JPY sources read in full text (now L2):** FX002, FX003, FX005, FX010, FX022 (`reports/phaseF_library_audit.md` section 6). **FX003's inflation result doesn't hold for the yen.** None gives a validated USD/JPY rule.
+  - **Phase B** (run check, fixes, missing tests) still waits for the 10-29 16:48 ET run.
+- **Phase A, baseline re-verification: DONE, approved 2026-10-28.** Section 7 of `reports/phaseA_project_audit.md`.
   - All overview figures confirmed. Local is 3 commits ahead of GitHub, 0 behind.
   - The 10-28 run used the old prompt and code; **the 10-29 run (16:48 ET) is the first with all new steps and hasn't happened yet.**
   - New findings: non-atomic state writes; the paper update isn't crash-safe (values and trades appended before the state is saved); step results are self-reported; no tests for interrupted writes, retry or restart recovery.

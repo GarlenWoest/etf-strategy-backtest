@@ -83,3 +83,20 @@ Nothing has been enabled.
    - When asked: **Username** `GarlenWoest`; **Password**: paste the token.
 4. **Check:** `.venv/bin/python -I tools/backup_private.py run` should print **`BACKUP OK: …`**. Then tell me, and I'll confirm the status read-only.
 5. **Before the token expires:** generate a new one, delete the old Keychain item (Keychain Access → search "github.com" → the item for this repository), then repeat step 3.
+
+## 5. Restore test of the private backup (2026-10-28, 19:20 ET; read only)
+
+The backup was cloned twice into a git-ignored scratch folder (`tmp/restore_test/`, deleted afterwards): once from GitHub, using your Keychain credential (never seen by Claude), and once from the local `.backup.git`. The originals were not touched, and nothing was pushed.
+
+| Check | Result |
+|---|---|
+| GitHub clone head = local clone head = `.backup.git` HEAD | All `8d11673` (snapshot of 10-28 18:31 ET) |
+| Git object integrity (`git fsck --full --strict` on the GitHub clone) | Clean |
+| Files restored | 16, all under `paper/`, `live/` or `briefs/`; 0 outside the allowlist; 0 event-cache files |
+| Completeness | Every current file in `paper/`, `live/` and `briefs/` (cache excluded) is in the backup; none missing |
+| Accuracy | All 16 restored files are byte-identical (SHA-256) to the GitHub clone, the local clone and the originals. No original has changed since the snapshot |
+| Book B journal | The entry fingerprint, recomputed from the restored journal, matches the restored `journal_hashes.csv` |
+| Parsing | Every restored JSON and JSONL file parses |
+| Access | Unauthenticated GitHub API and web requests: 404 |
+
+**Not tested:** restoring into the live folders, which would overwrite the originals. A real restore would copy these files back after the app is closed.
