@@ -53,7 +53,7 @@ Measured at the 20:01 UTC poll from Yahoo 1-minute closes. Each price is the bar
 |---|---|---|---|
 | USD/JPY (JPY=X, indicative) | +4.3 pips (+2.7 bp) | −34.8 pips (−22.0 bp) | complete |
 | GBP/USD (GBPUSD=X, indicative) | +1.4 pips (+1.1 bp) | +23.9 pips (+18.0 bp) | complete |
-| Gold (COMEX GC=F, context, 10-min delayed) | −16.8 bp | not yet available | INCOMPLETE: Yahoo's 10-minute delay meant the 16:00 bar didn't exist at 16:01; the next poll completes it |
+| Gold (COMEX GC=F, context, 10-min delayed) | −16.8 bp | +104.0 bp | complete at the 21:20 UTC poll (at 16:01 the delayed 16:00 bar didn't exist yet) |
 
 **How to read this:**
 - These are observed changes in indicative prices.

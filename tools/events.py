@@ -192,7 +192,7 @@ def collect(store, now):
     try:
         got = E.parse_bls_ics(get(BLS_ICS, SCHEDULE_TTL_S)[0], BLS_ICS)
         new += got
-        st["BLS release calendar (iCalendar)"] = "OK (%d events; parser first tested against the live file on this run)" % len(got)
+        st["BLS release calendar (iCalendar)"] = "OK (%d events)" % len(got)
     except Exception as ex:
         st["BLS release calendar (iCalendar)"] = "BLOCKED: %s" % ex if "BLS_CONTACT_EMAIL" in str(ex) else "FAILED: %s" % ex
     merge(store, new, now)
