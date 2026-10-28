@@ -1,6 +1,6 @@
 # Can simple trading rules beat a plain diversified portfolio? An honest test
 
-_A personal research project that tested 142 published-style trading rules on gold, stocks, bonds, commodities and the US dollar/Japanese yen exchange rate, using methods designed to catch luck and self-deception. Every rule was written down before it was tested, judged on data it had never seen, and scored with a statistical correction for the number of rules tried. The result: 140 were killed by pre-registered rules; 2 (V119, V122) passed Study 3's primary rule but failed all robustness checks; none was judged robust. Simple benchmarks, such as an equal-weight mix of a few funds, were hard to beat. The project has since become a careful research system: data-quality tests, a tamper-evident research diary, an official economic-event monitor and a fictional-money paper-trading experiment. It is connected to no broker and uses no real money. Figures as of October 28, 2026. Not financial or tax advice._
+_A personal research project that tested 142 published-style trading rules on gold, stocks, bonds, commodities and the US dollar/Japanese yen exchange rate, using methods designed to catch luck and self-deception. Every rule was written down before it was tested, judged on data it had never seen, and scored with a statistical correction for the number of rules tried. The result: 140 were killed by pre-registered rules; 2 (V119, V122) passed Study 3's primary rule but failed all robustness checks; none was judged robust. Simple benchmarks, such as an equal-weight mix of a few funds, were hard to beat. The project has since become a careful research system: data-quality tests, a tamper-evident research diary, an official economic-event monitor and a fictional-money paper-trading experiment. It is connected to no broker and uses no real money. Figures as of October 28, 2026. Not financial or tax advice. Code, reports and the full research log: [github.com/GarlenWoest/etf-strategy-backtest](https://github.com/GarlenWoest/etf-strategy-backtest)._
 
 ### Contents
 
@@ -329,6 +329,8 @@ No conclusion will be drawn before then, and even 3 months is short.
 - Should a paper stop-loss be allowed to override Book B's minimum 5-day hold? Today it doesn't, and stops fill at the next open, not at the stop level.
 
 ## 12. What's next
+
+The code, reports and research log are public at [github.com/GarlenWoest/etf-strategy-backtest](https://github.com/GarlenWoest/etf-strategy-backtest), so anyone can check the work or follow what happens next.
 
 **Scheduled and certain**
 - October 29: check that the first scheduled run includes the snapshot, event poll, step and delivery records.
