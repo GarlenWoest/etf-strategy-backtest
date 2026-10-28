@@ -23,7 +23,7 @@ All 12 academic USD/JPY sources and C023 (gold vs the dollar and yen) were check
 | FX003 Engel et al. | **Wrong title and no URL** | Correct paper: "A Reconsideration of the Failure of Uncovered Interest Parity for the U.S. Dollar" (JIE 2022; NBER w28420). Also adds a finding we lacked: **inflation differentials do predict USD excess returns.** |
 | FX012 Fatum & Hutchison | **Wrong title** (belonged to another paper) | NBER w9648 is "Effectiveness of Official Daily Foreign Exchange Market Intervention Operations in Japan" (JIMF 2006) |
 | FX011 Ito | Wrong year | NBER WP 8914, April 2002; disclosure date not on the page |
-| FX002 Brunnermeier et al. | Partly | **The USD/JPY October 1998 crash claim is not in the abstract: unverified** |
+| FX002 Brunnermeier et al. | Partly → verified in full text (later on 10-28) | The October 7–8, 1998 USD/JPY drop is in the paper as a no-news move; its link to carry unwinding is the authors' conjecture |
 | FX010 Ranaldo & Söderlind | Partly | "Strongest for the yen in 2008" removed (the WP sample is 1993–2006); the euro and pound added |
 | C023 Pukthuanthong & Roll | Partly | "Gold is a global hedge" is not in the abstract; removed |
 | FX001, FX004, FX007, FX008 | Partly | Wording fixed: no "2008" cut-off; FX004's figures unverified; FX007's qualifier restored; FX008 isn't "easily earned" |
@@ -64,5 +64,7 @@ Everything comes from the pages actually read; "not stated on the page read" is 
 - **Gold (42 of 46 kept sources at L0) and GBP/USD:** not re-verified. USD/JPY was the priority.
 - **Books, lectures, videos:** none added. Nothing was marked analysed without an accessible lawful transcript or text.
 - **Reproducing a source's method (L3):** none attempted. That would be research, and research is paused.
-- **The 1998 crash claim:** needs the full text of Brunnermeier et al.
-- **Chen & Tsang's journal year:** not verified here.
+- **Closed later on 10-28:**
+  - **The 1998 crash claim is verified** in the NBER full text (WP 14473, PDF p. 3). It's presented as a no-news move, with carry unwinding as the authors' conjecture.
+  - **Chen & Tsang's journal is verified:** Review of Economics and Statistics 95(1) 185–205 (2013), DOI 10.1162/REST_a_00231, from the Virginia Tech repository record.
+  - Corrections applied: 23. USD/JPY depth is now L1 16, L2 5.

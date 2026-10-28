@@ -1,10 +1,10 @@
 source_id,depth,what_was_read,bibliographic,summary_check,verified_url,verified_on
 FX001,L1,abstract on NBER page,verified (NBER WP 24342; IMF Economic Review 70(3) 2022),partly: corrected,https://www.nber.org/papers/w24342,2026-10-28
-FX002,L1,abstract on NBER page,verified (NBER WP 14473; NBER Macroeconomics Annual 23),partly: 1998 USD/JPY claim unverified,https://www.nber.org/papers/w14473,2026-10-28
+FX002,L2,"abstract (NBER page) and full text in part: introduction incl. the October 1998 USD/JPY passage and footnote, regression sample notes (WP 14473, Nov 2008)",verified (NBER WP 14473; NBER Macroeconomics Annual 23),"corrected: 1998 claim verified, framed as the authors' conjecture",https://www.nber.org/system/files/working_papers/w14473/w14473.pdf,2026-10-28
 FX003,L1,abstract on NBER page,corrected (title and URL were unverified; JIE 2022; NBER WP 28420),corrected,https://www.nber.org/papers/w28420,2026-10-28
 FX004,L1,abstract on NBER page (MIT repository: HTTP 429),verified (NBER WP 14082; RFS 24(11) 2011),partly: figures unverified,https://www.nber.org/papers/w14082,2026-10-28
 FX005,L1,abstract on City University repository record,verified (Journal of Finance 67(2) 2012),match (>90% is a lower bound for five carry portfolios),https://openaccess.city.ac.uk/id/eprint/3391/,2026-10-28
-FX006,L2,"abstract, introduction, data section, out-of-sample footnote, sign statements (June 2011 version, 49 pp.)",verified (author version June 2011),match; sign symmetric (note corrected),https://faculty.washington.edu/yuchin/Papers/CT1v3.pdf,2026-10-28
+FX006,L2,"abstract, introduction, data section, out-of-sample footnote, sign statements (June 2011 version, 49 pp.)","verified (Review of Economics and Statistics 95(1) 185-205, 2013, DOI 10.1162/REST_a_00231; author version June 2011 read)",match; sign symmetric (note corrected),https://faculty.washington.edu/yuchin/Papers/CT1v3.pdf,2026-10-28
 FX007,L1,abstract and first page of introduction (WP 2006-046B rev. March 2007),verified (WP); 2009 journal year unverified,partly: qualifier restored,https://files.stlouisfed.org/files/htdocs/wp/2006/2006-046.pdf,2026-10-28
 FX008,L1,abstract on City University repository record,verified (JFE 106(3) 2012),partly: corrected,https://openaccess.city.ac.uk/3296,2026-10-28
 FX009,L1,abstract on IDEAS/RePEc (Duke page behind a bot check; not bypassed),verified (JEEA 6(2-3) 2008 pp. 581-588),match,https://ideas.repec.org/a/tpr/jeurec/v6y2008i2-3p581-588.html,2026-10-28
@@ -19,4 +19,4 @@ FX025,L1,abstract on Bank of Canada page,verified (BoC SWP 2021-48; JF 79(1) 202
 FX026,L1,abstract on Federal Reserve IFDP page,verified (IFDP 903 Sept 2007),new source,https://www.federalreserve.gov/econres/ifdp/trading-activity-and-exchange-rates-in-high-frequency-ebs-data.htm,2026-10-28
 FX013,L2,used as a data source (MoF intervention records parsed and validated),verified (official MoF page),n/a (data),https://www.mof.go.jp/english/policy/international_policy/reference/feio/index.html,2026-10-28
 FX014,L2,used as a data source (MoF JGB yields; JGB gaps matched Japanese bank holidays 1990-2023),verified (official MoF),n/a (data),reports/specialists/usdjpy/data_quality.md,2026-10-28
-FX015,L2,"used as a data source (DEXJPUS; H.10 'noon buying rates in New York' read on the Fed's about page)",verified (Fed H.10 about page),n/a (data),https://www.federalreserve.gov/releases/h10/about.htm,2026-10-28
+FX015,L2,used as a data source (DEXJPUS; H.10 'noon buying rates in New York' read on the Fed's about page),verified (Fed H.10 about page),n/a (data),https://www.federalreserve.gov/releases/h10/about.htm,2026-10-28
