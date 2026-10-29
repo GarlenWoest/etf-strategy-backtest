@@ -30,6 +30,9 @@ import numpy as np
 import pandas as pd
 import requests
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from atomic_io import append_text, read_jsonl, repair_tail, write_text as atomic_write  # noqa: E402  (crash-safe writes, 2026-10-29)
+
 from src import PROJECT_ROOT, load_config
 from src import clock as K
 from src import market_intel as M
@@ -200,16 +203,15 @@ def snapshot():
     refs = references(now)
     _guard(OUT).mkdir(parents=True, exist_ok=True)
     log = _guard(OUT / "observations.jsonl")
-    seen = set()
-    if log.exists():
-        seen = {json.loads(l).get("key") for l in log.read_text().splitlines() if l.strip()}
+    if repair_tail(log):                                         # a torn last line from an interrupted run
+        print("note: removed an unfinished last line from %s (interrupted earlier write)" % log.name)
+    seen = {r.get("key") for r in read_jsonl(log)}
     new = 0
-    with open(log, "a") as fh:
-        for o in obs:
-            o["key"] = key(o)
-            if o["key"] not in seen and o["last"] is not None:
-                fh.write(json.dumps(o, default=str) + "\n")
-                new += 1
+    for o in obs:
+        o["key"] = key(o)
+        if o["key"] not in seen and o["last"] is not None:
+            append_text(log, json.dumps(o, default=str) + "\n")
+            new += 1
     words = CFG["specialist_status"]
     status = {s: M.specialist_status(next(o for o in obs if o["specialist"] == s and o["role"] == "primary")["freshness"],
                                      next(o for o in obs if o["specialist"] == s and o["role"] == "primary")["realized_vol_20d_annualised"],
@@ -217,9 +219,9 @@ def snapshot():
     snap = {"generated_utc": now.isoformat(timespec="seconds"), "clock": K.snapshot(now), "status": status,
             "observations": obs, "references": refs, "new_observations_written": new,
             "label": "READ-ONLY MONITORING; indicative data; not research; no signal"}
-    _guard(OUT / "latest.json").write_text(json.dumps(snap, indent=1, default=str))
+    atomic_write(_guard(OUT / "latest.json"), json.dumps(snap, indent=1, default=str))
     md = render(snap)
-    _guard(OUT / "latest.md").write_text(md)
+    atomic_write(_guard(OUT / "latest.md"), md)
     print(md)
 
 
@@ -352,7 +354,7 @@ def verify():
           "- Sources: ECB eurofxref-hist-90d.xml (Last-Modified %s); FRED DEXJPUS/DEXUSUK (Fed H.10)." % ecb_lm]
     _guard(REPORTS).mkdir(parents=True, exist_ok=True)
     out = _guard(REPORTS / ("accuracy_%s.md" % today))
-    out.write_text("\n".join(L) + "\n")
+    atomic_write(out, "\n".join(L) + "\n")
     print("\n".join(L))
 
 

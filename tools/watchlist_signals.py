@@ -29,6 +29,9 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from atomic_io import write_text as atomic_write  # noqa: E402  (crash-safe writes, 2026-10-29)
+
 warnings.filterwarnings("ignore")
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -211,21 +214,23 @@ def main(live, today):
                          "the ETFs' own histories (VTI/IEF/DBC/GLD), which was never tested. %s" % FOOT)
         state = {"last_month_end": me.isoformat(), "targets": new, "last_report_month": (state or {}).get(
             "last_report_month", pd.Period(me, "M").strftime("%Y-%m")), "created": (state or {}).get("created", now)}
-    with open(log_p, "w", newline="") as fh:
-        wr = csv.DictWriter(fh, fieldnames=LOG_COLS)
-        wr.writeheader()
-        wr.writerows(rows)
+    import io
+    buf = io.StringIO()
+    wr = csv.DictWriter(buf, fieldnames=LOG_COLS)
+    wr.writeheader()
+    wr.writerows(rows)
+    atomic_write(log_p, buf.getvalue())
 
     # 3. monthly report for the latest completed month not yet reported
     prev = (pd.Period(today, "M") - 1).strftime("%Y-%m")
     if prev > state["last_report_month"]:
         rep = monthly_report(prev, adj, rows, state)
         if rep:
-            (live / "reports" / ("%s.md" % prev)).write_text(rep)
+            atomic_write(live / "reports" / ("%s.md" % prev), rep)
             notes.append("NOTIFY: [WATCHLIST, NOT VALIDATED] Monthly paper-vs-backtest report for %s: live/reports/%s.md. %s"
                          % (prev, prev, FOOT))
             state["last_report_month"] = prev
-    state_p.write_text(json.dumps(state, indent=2))
+    atomic_write(state_p, json.dumps(state, indent=2))
     for n in notes:
         print(n)
     if not notes:

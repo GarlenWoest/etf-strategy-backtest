@@ -36,6 +36,9 @@ import requests
 from src import PROJECT_ROOT
 from src import events as E
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from atomic_io import append_text, repair_tail, write_text as atomic_write  # noqa: E402  (crash-safe writes, 2026-10-29)
+
 OUT = PROJECT_ROOT / "live" / "events"
 CACHE = OUT / "cache"
 SCHEDULE_TTL_S = 6 * 3600
@@ -95,8 +98,8 @@ def get(url, ttl=None):
     text = r.content.decode(r.encoding if "charset" in ctype.lower() else "utf-8", errors="replace")
     m = {"url": url, "fetched": _t.time(), "fetched_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
          "last_modified": r.headers.get("Last-Modified")}
-    f.write_text(text)
-    meta.write_text(json.dumps(m))
+    atomic_write(f, text)
+    atomic_write(meta, json.dumps(m))
     return text, m
 
 
@@ -106,9 +109,9 @@ def load():
 
 
 def log_change(kind, event_id, detail, now):
-    with open(_guard(OUT / "changes.jsonl"), "a") as fh:
-        fh.write(json.dumps({"at_utc": now.isoformat(timespec="seconds"), "kind": kind, "event_id": event_id,
-                             "detail": detail}, default=str) + "\n")
+    repair_tail(_guard(OUT / "changes.jsonl"))
+    append_text(_guard(OUT / "changes.jsonl"), json.dumps({"at_utc": now.isoformat(timespec="seconds"), "kind": kind,
+                                                           "event_id": event_id, "detail": detail}, default=str) + "\n")
 
 
 SCHED_FIELDS = ("scheduled_date", "scheduled_time_utc", "title")
@@ -356,7 +359,7 @@ def report(store, now):
           "- Detection delay depends on when this monitor runs; it is not real time.",
           "- BEA releases have no official feed here: past ones show PAST_UNCONFIRMED until a confirmation source is added."]
     md = "\n".join(L) + "\n"
-    _guard(OUT / "latest.md").write_text(md)
+    atomic_write(_guard(OUT / "latest.md"), md)
     return md
 
 
@@ -368,7 +371,7 @@ def poll():
     collect(store, now)
     reactions(store, now)
     store["generated_utc"] = now.isoformat(timespec="seconds")
-    _guard(OUT / "events.json").write_text(json.dumps(store, indent=1, default=str))
+    atomic_write(_guard(OUT / "events.json"), json.dumps(store, indent=1, default=str))
     print(report(store, now))
 
 

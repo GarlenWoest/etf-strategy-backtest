@@ -14,6 +14,13 @@ the ex-date (quoted prices + yfinance dividends, so past fills never change when
 Exempt from hard rule 2 for paper/ ONLY: writes nothing outside paper/, reads live/state.json, imports nothing from src/;
 nothing here may enter data/, research_log.csv or any study.
 
+Crash safety (2026-10-29, approved): state.json is written atomically (temp file + rename) and records
+`committed_bytes`, the size of each append-only file (values.csv, trades.csv, the journal and its fingerprints) at
+that save. Each processed day appends its rows and then saves the state, so rows and state commit together. On the
+next run, bytes beyond the committed size (left by an interrupted run) are moved to paper/recovery/ and logged in
+paper/recovery_log.csv, and that day is processed again: no duplicate rows or fills. The prices each day used are kept
+in paper/inputs/<date>.json so a replay is exact. Every update ends with one PAPER UPDATE OK/ERROR line.
+
 Commands (all write only inside paper/):
   init --start YYYY-MM-DD        create the books (once)
   update [--today YYYY-MM-DD]    weekday run: fills, dividends, interest, mark to market, auto exits, checkpoints
@@ -24,6 +31,7 @@ Commands (all write only inside paper/):
 import csv
 import hashlib
 import json
+import os
 import sys
 import warnings
 from datetime import date, datetime, timedelta
@@ -36,6 +44,7 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from watchlist_signals import is_month_end_trading_day, is_trading_day  # noqa: E402  (NYSE calendar, same tools/ dir)
+from atomic_io import append_text, write_text as atomic_write  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 LABEL = "PAPER, FICTIONAL MONEY"
@@ -49,6 +58,7 @@ COST = {"unlev": 0.0007, "lev": 0.0010}
 LEVERAGE = {"UGL": 2.0, "AGQ": 2.0, "UCO": 2.0, "UPRO": 3.0, "TQQQ": 3.0, "TMF": 3.0}
 MIN_HOLD = 5
 BOOKS = ["A", "B", "SPY", "MIX"]
+APPEND_FILES = ("values.csv", "trades.csv", "book_b_journal.md", "journal_hashes.csv")
 
 
 def cost(t):
@@ -74,20 +84,75 @@ class Paper:
         self.trades = root / "trades.csv"
 
     def load(self):
-        return json.loads(self.state_p.read_text())
+        s = json.loads(self.state_p.read_text())
+        if "committed_bytes" not in s:      # state written before the crash-safety upgrade: those files are complete
+            s["committed_bytes"], s["committed_sha256"] = self.sizes(), self.prefix_hashes()
+        return s
+
+    def sizes(self):
+        return {n: (self.dir / n).stat().st_size if (self.dir / n).exists() else 0 for n in APPEND_FILES}
+
+    def prefix_hashes(self, sizes=None):
+        """SHA-256 of the first `sizes[name]` bytes of each append-only file (default: the whole file)."""
+        sizes = sizes or self.sizes()
+        out = {}
+        for n, k in sizes.items():
+            f = self.dir / n
+            with open(f, "rb") if f.exists() else open(os.devnull, "rb") as fh:
+                out[n] = hashlib.sha256(fh.read(k)).hexdigest()
+        return out
 
     def save(self, s):
-        self.state_p.write_text(json.dumps(s, indent=2))
+        """Commit: record the append-only files' current sizes and content hashes, then replace state.json atomically."""
+        s["committed_bytes"] = self.sizes()
+        s["committed_sha256"] = self.prefix_hashes(s["committed_bytes"])
+        atomic_write(self.state_p, json.dumps(s, indent=2))
+
+    def recover(self, s):
+        """Undo appends made after the last committed save (an interrupted run). Returns NOTIFY lines. A file SHORTER
+        than its committed size means committed data was lost: raise, never guess."""
+        notes = []
+        hashes = s.get("committed_sha256") or {}
+        for name, size in s.get("committed_bytes", {}).items():
+            f = self.dir / name
+            cur = f.stat().st_size if f.exists() else 0
+            if cur < size:
+                raise RuntimeError("%s is %d bytes but %d were committed: committed data is missing" % (name, cur, size))
+            if name in hashes and self.prefix_hashes({name: size})[name] != hashes[name]:
+                # committed content itself changed: an edit, not an interrupted append. Touch nothing.
+                if name in ("book_b_journal.md", "journal_hashes.csv"):
+                    continue                                        # verify_journal() raises the tamper alert
+                raise RuntimeError("committed content of %s was changed after it was written" % name)
+            if cur > size:
+                with open(f, "rb") as fh:
+                    fh.seek(size)
+                    tail = fh.read()
+                stamp = now_et().strftime("%Y%m%dT%H%M%S")
+                keep = self.dir / "recovery" / ("%s_%s.tail" % (stamp, name))
+                keep.parent.mkdir(exist_ok=True)
+                keep.write_bytes(tail)
+                self.append_csv(self.dir / "recovery_log.csv", ["logged_at_et", "file", "committed_bytes", "removed_bytes",
+                                                               "removed_sha256", "kept_as"],
+                                {"logged_at_et": now_et().strftime("%Y-%m-%d %H:%M:%S ET"), "file": name,
+                                 "committed_bytes": size, "removed_bytes": len(tail),
+                                 "removed_sha256": hashlib.sha256(tail).hexdigest(), "kept_as": "recovery/" + keep.name})
+                os.truncate(f, size)
+                notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] recovered from an interrupted run: %d uncommitted bytes "
+                             "removed from %s (kept in paper/recovery/); the affected day is processed again"
+                             % (len(tail), name))
+        return notes
 
     def append_csv(self, path, cols, row):
-        new = not path.exists()
-        with open(path, "a", newline="") as fh:
-            if new:
-                fh.write("# %s\n" % LABEL)
-            w = csv.DictWriter(fh, fieldnames=cols)
-            if new:
-                w.writeheader()
-            w.writerow(row)
+        import io
+        new = not path.exists() or path.stat().st_size == 0     # an empty file (after recovery) still needs its header
+        buf = io.StringIO()
+        if new:
+            buf.write("# %s\n" % LABEL)
+        w = csv.DictWriter(buf, fieldnames=cols)
+        if new:
+            w.writeheader()
+        w.writerow(row)
+        append_text(path, buf.getvalue())
 
     def read_csv(self, path):
         if not path.exists():
@@ -113,9 +178,9 @@ def init(p, start):
                     {"book": "SPY", "kind": "target", "weights": {"SPY": 1.0}, "fill_date": start.isoformat()},
                     {"book": "MIX", "kind": "target", "weights": {"SPY": 0.7, "GLD": 0.3}, "fill_date": start.isoformat()}],
         "a_applied_month_end": None, "checkpoints": {}, "journal_entries": 0}
-    p.save(s)
-    p.journal_md.write_text("# Book B journal (%s)\n\nAppend-only. Each entry is written by `tools/paper_books.py journal` "
-                            "before its trade and fingerprinted in `journal_hashes.csv`; any later edit is detected.\n" % LABEL)
+    atomic_write(p.journal_md, "# Book B journal (%s)\n\nAppend-only. Each entry is written by `tools/paper_books.py journal` "
+                 "before its trade and fingerprinted in `journal_hashes.csv`; any later edit is detected.\n" % LABEL)
+    p.save(s)                                       # commit after the journal header exists, so it is part of the commit
     print("initialised paper books; start %s" % start)
 
 
@@ -209,7 +274,8 @@ def update(p, today):
         print("REFUSED: " + refusal + "; nothing was changed. The next run after 16:15 ET catches up.")
         return []
     s = p.load()
-    notes = []
+    notes = p.recover(s)
+    p.last_summary = None
     tamper = verify_journal(p)
     if tamper:
         notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] Book B journal check FAILED: %s" % tamper)
@@ -220,6 +286,7 @@ def update(p, today):
     start = date.fromisoformat(s["start"])
     if today < start:
         print("paper books start %s; nothing to do yet" % start)
+        p.last_summary = "PAPER UPDATE OK: books start %s; nothing to do yet" % start
         return notes
     need = set(A_INSTR) | set(B_UNIVERSE) | {"SPY", "GLD"}
     df = download(list(need) + ["^IRX"], (start - timedelta(days=10)).isoformat())
@@ -232,8 +299,9 @@ def update(p, today):
                      "the next run catches up" % today)
     Cf = C.ffill()
     last = date.fromisoformat(s["last_update"]) if s["last_update"] else None
-    trade_log = []
+    processed, n_fills = [], 0
     for d in days:
+        trade_log = []
         if last and d <= last:
             continue
         ts = pd.Timestamp(d)
@@ -306,6 +374,10 @@ def update(p, today):
                 "A_V122": value_of(s["books"]["A"]["V122"], closes), "A_V074": value_of(s["books"]["A"]["V074"], closes),
                 "B": value_of(s["books"]["B"], closes), "SPY": value_of(s["books"]["SPY"], closes),
                 "MIX": value_of(s["books"]["MIX"], closes)}
+        save_inputs(p, d, need, O, C, Cf, D, rate)
+        for row in trade_log:                                       # this day's fills, then its values, then commit
+            p.append_csv(p.trades, list(row), row)
+        n_fills += len(trade_log)
         p.append_csv(p.values, ["date"] + list(vals), {"date": d.isoformat(), **{k: "%.4f" % v for k, v in vals.items()}})
         B = s["books"]
         s["exposure"] = {"as_of": d.isoformat(), "A": exposure([B["A"]["V122"], B["A"]["V074"]], closes),
@@ -334,11 +406,27 @@ def update(p, today):
                 s["pending"].append({"book": "B", "kind": "b_sell", "instrument": t, "fill_date": nxt, "entry": m["entry"],
                                      "reason": "planned exit from journal entry #%d" % m["entry"]})
         s["last_update"] = d.isoformat()
-    for row in trade_log:
-        p.append_csv(p.trades, list(row), row)
+        p.save(s)                                                   # commit this day (rows + state together)
+        processed.append(d.isoformat())
     p.save(s)
     notes += checkpoints(p, s, today)
+    p.last_summary = ("PAPER UPDATE OK: processed %d new trading day(s) %s; %d fill(s); books valued through %s" % (
+        len(processed), ", ".join(processed), n_fills, s["last_update"]) if processed else
+        "PAPER UPDATE OK: no new trading day to process; books valued through %s" % s["last_update"])
     return notes
+
+
+def save_inputs(p, d, need, O, C, Cf, D, rate):
+    """Keep the prices this day used, as received, so any later replay is exact (Yahoo revises past bars)."""
+    ts = pd.Timestamp(d)
+    num = lambda x: None if x is None or np.isnan(x) else float(x)
+    rec = {"label": LABEL, "date": d.isoformat(), "saved_at_et": now_et().strftime("%Y-%m-%d %H:%M:%S ET"),
+           "source": "Yahoo Finance via yfinance (unadjusted Open/Close, Dividends, ^IRX)", "tbill_daily_rate": rate,
+           "open": {t: num(O.loc[ts, t]) for t in sorted(need)}, "close": {t: num(C.loc[ts, t]) for t in sorted(need)},
+           "close_ffilled": {t: num(Cf.loc[ts, t]) for t in sorted(need)},
+           "dividends": {t: float(D[t].get(ts, 0.0)) for t in sorted(need) if D is not None and t in D.columns
+                         and D[t].get(ts, 0.0) and not np.isnan(D[t].get(ts, 0.0))}}
+    atomic_write(p.dir / "inputs" / ("%s.json" % d.isoformat()), json.dumps(rec, indent=1))
 
 
 def order_instruments(s, order):
@@ -395,6 +483,8 @@ def verify_journal(p):
 
 def journal(p, raw, now_et):
     s = p.load()
+    for n in p.recover(s):
+        print(n)
     if verify_journal(p):
         sys.exit("REJECTED: journal check failed: %s" % verify_journal(p))
     for n in record_missed(p, s, now_et):                    # close out earlier weeks first, so entries stay in order
@@ -459,10 +549,9 @@ def append_entry(p, s, e, now_et):
     s["journal_entries"] += 1
     e = {**e, "entry": s["journal_entries"], "written_at_et": now_et.strftime("%Y-%m-%d %H:%M ET"), "label": LABEL}
     tag = " (LATE)" if e.get("late") else ""
-    with open(p.journal_md, "a") as fh:
-        fh.write("\n## Entry #%d (week of %s): %s %s%s\n\n```json\n%s\n```\n" % (
-            e["entry"], e["decision_date"], e["action"], e.get("instrument", ""), tag,
-            json.dumps(e, sort_keys=True, ensure_ascii=False, indent=1)))
+    append_text(p.journal_md, "\n## Entry #%d (week of %s): %s %s%s\n\n```json\n%s\n```\n" % (
+        e["entry"], e["decision_date"], e["action"], e.get("instrument", ""), tag,
+        json.dumps(e, sort_keys=True, ensure_ascii=False, indent=1)))
     p.append_csv(p.hashes, ["entry", "written_at_et", "sha256"], {"entry": e["entry"], "written_at_et": e["written_at_et"],
                                                                    "sha256": entry_hash(e)})
     return e
@@ -541,7 +630,7 @@ def checkpoints(p, s, today):
             tr = p.read_csv(p.trades)
             txt = "# %s: %s\n\n**%s.** **%s.**\n\n%s\n\nTrades so far: %d (see `paper/trades.csv`). Book B journal entries: %d.\n" % (
                 LABEL, title, LABEL, warn, table(p), len(tr), s["journal_entries"])
-            (p.dir / "reports" / ("checkpoint_%s.md" % key)).write_text(txt)
+            atomic_write(p.dir / "reports" / ("checkpoint_%s.md" % key), txt)
             s["checkpoints"][key] = today.isoformat()
             p.save(s)
             notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] %s written: paper/reports/checkpoint_%s.md (%s)" % (title, key, warn))
@@ -559,8 +648,15 @@ if __name__ == "__main__":
         init(p, date.fromisoformat(a[a.index("--start") + 1]))
     elif cmd == "update":
         today = date.fromisoformat(a[a.index("--today") + 1]) if "--today" in a else datetime.now(ET).date()
-        for n in update(p, today):
-            print(n)
+        try:
+            for n in update(p, today):
+                print(n)
+        except Exception as ex:                                     # never end silently: the run must see an ERROR line
+            print("NOTIFY: [PAPER, FICTIONAL MONEY] update failed: %s: %s" % (type(ex).__name__, str(ex)[:150]))
+            print("PAPER UPDATE ERROR: %s: %s" % (type(ex).__name__, str(ex)[:150]))
+            sys.exit(1)
+        if getattr(p, "last_summary", None):
+            print(p.last_summary)
     elif cmd == "status":
         status(p)
     elif cmd == "journal":

@@ -5,6 +5,14 @@ _Last updated: 2026-10-28 evening (new development phase: Phase A re-verificatio
 ## Current phase
 ### Master prompt: proactive, measurable trading intelligence system, USD/JPY first (user, 2026-10-29)
 - **Build order:** steps 1–10 with stop points after steps 2, 3, 6, 8 and 9. Deterministic core; no LLM in any decision path; plain-Python notifications. Internal simulator only. Commit locally after each step; don't push.
+- **Step 2, reliability: DONE, STOP for review.** Section 6 of `reports/phaseH_reliability.md`.
+  - **Atomic writes everywhere.** The paper update now commits day by day and recovers from interruptions without duplicate rows or fills.
+  - **Inputs are kept per day,** and every update ends with an explicit OK/ERROR line.
+  - **Proofs:** old and new code give identical outputs. The real `values.csv` is reproduced byte for byte; trades match except one 4th-decimal price.
+  - **Data incident:** Yahoo revised two 10-26 opens.
+  - **Two bugs** were found by the new tests and fixed.
+  - 235 tests pass.
+  - **Persistence choice for the new system: SQLite** (stdlib, no install).
 - **Step 1, verify: DONE (2026-10-29 18:15 ET).**
   - **The 10-29 run was about 78 minutes late** (started 18:06 ET) because the Mac was asleep on battery. It ran in brief Power Nap wakes.
   - **All new steps ran and were recorded.** Snapshot and event poll ok; all three markets DATA OK; exposure column computed.

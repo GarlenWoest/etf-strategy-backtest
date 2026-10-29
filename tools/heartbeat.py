@@ -34,6 +34,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from watchlist_signals import is_trading_day  # noqa: E402  (NYSE calendar)
+from atomic_io import write_text as atomic_write  # noqa: E402  (crash-safe writes, 2026-10-29)
 
 ROOT = Path(__file__).resolve().parent.parent
 ET = ZoneInfo("America/New_York")
@@ -50,8 +51,7 @@ def load(path):
 
 def save(path, hb):
     hb["runs"] = hb["runs"][-KEEP:]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(hb, indent=1))
+    atomic_write(path, json.dumps(hb, indent=1))
 
 
 def start(path, kind, now):
@@ -118,7 +118,9 @@ def finish(path, rid, status, note, now):
         hb["runs"].append({"id": rid, "kind": rid.split("-")[0], "started": None, "state": "failed", "steps": {},
                            "notifications": [], "finished": now.isoformat(timespec="seconds"), "status": status,
                            "note": "finish without start: " + note[:150]})
+        state = "failed"
     save(path, hb)
+    return state
 
 
 def trading_days_after(a, b):
@@ -238,8 +240,9 @@ if __name__ == "__main__":
     if cmd == "start":
         print(start(path, a[a.index("--kind") + 1], now))
     elif cmd == "finish":
-        finish(path, a[a.index("--id") + 1], a[a.index("--status") + 1],
-               a[a.index("--note") + 1] if "--note" in a else "", now)
+        st = finish(path, a[a.index("--id") + 1], a[a.index("--status") + 1],
+                    a[a.index("--note") + 1] if "--note" in a else "", now)
+        print("HEARTBEAT FINISH OK: run recorded as %s" % st)
     elif cmd == "step":
         step(path, a[a.index("--id") + 1], a[a.index("--name") + 1], a[a.index("--status") + 1],
              a[a.index("--note") + 1] if "--note" in a else "", now)

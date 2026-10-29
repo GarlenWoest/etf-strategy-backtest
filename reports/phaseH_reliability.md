@@ -100,3 +100,65 @@ The backup was cloned twice into a git-ignored scratch folder (`tmp/restore_test
 | Access | Unauthenticated GitHub API and web requests: 404 |
 
 **Not tested:** restoring into the live folders, which would overwrite the originals. A real restore would copy these files back after the app is closed.
+
+## 6. Crash safety and persistence (master prompt step 2, 2026-10-29)
+
+### What changed (monitoring scripts only; no paper-book trading rule changed)
+
+| Change | Where | Why |
+|---|---|---|
+| `tools/atomic_io.py`: temp file + fsync + atomic rename; fsynced appends; torn-line repair; tolerant JSONL reader | new | One crash-safe writer for all monitoring files |
+| Every state and report write is atomic | `paper_books.py`, `heartbeat.py`, `watchlist_signals.py`, `events.py`, `market_intel.py` | An interruption left a truncated `state.json`/`heartbeat.json`/`events.json` (Phase A finding 1) |
+| **Paper update is crash-safe in place:** each processed day appends its trades and values, then saves the state, which records `committed_bytes` and `committed_sha256` of every append-only file. On the next run, bytes beyond the committed size are moved to `paper/recovery/`, logged in `paper/recovery_log.csv`, and that day is redone. An edit to committed content is never "repaired": the run stops with an error (and journal edits still raise the tamper alert) | `paper_books.py` | Phase A finding 2: a crash between the appends and the state save could duplicate rows and fills |
+| **Inputs kept as first received:** `paper/inputs/<date>.json` (opens, closes, dividends, T-bill rate used that day) | `paper_books.py` | The replay proof showed Yahoo revised two 10-26 opens after the fills; without stored inputs, history can't be replayed exactly |
+| **Explicit status lines:** `PAPER UPDATE OK: …` or `PAPER UPDATE ERROR: …` (never silent); `HEARTBEAT FINISH OK: run recorded as …` | `paper_books.py`, `heartbeat.py` | 10-29: a successful update printed nothing and was recorded as an ERROR (Phase A finding 3) |
+| Backup excludes temp files (`**/.*.tmp`) | `backup_private.py` | A leftover temp file must never enter the backup |
+
+**Two bugs found by the new tests and fixed before commit:**
+- `init()` saved the state before writing the journal header, so the header was uncommitted.
+- An empty file left after recovery made the CSV writer skip its header.
+
+### Proof that the books are unchanged
+
+1. **Golden equivalence (tracked test).** Old and new code, run on the same synthetic 3-week scenario (fills, a Book B planned exit, a dividend, a month-end rebalance), produce byte-identical `values.csv`, `trades.csv`, journal and fingerprints. The test pins their SHA-256 hashes.
+2. **Real books (private test, skipped where `paper/` is absent).** Replayed from the start with journal entry #1 as written, on one price download:
+   - **`values.csv` is reproduced byte for byte** through 10-29;
+   - `trades.csv` matches exactly except one fill price that differs in the 4th decimal: the 10-26 VTI open was stored to 4 decimals, so its exact value can't be recovered.
+
+   This needed the five 10-26 opens set back to the recorded values; Yahoo had since revised VTI and GLD by about 0.002–0.005.
+3. **Old vs new code on that real download:** all four files byte-identical, state identical apart from the two new commit fields.
+4. **End to end on a copy of the real books:** `PAPER UPDATE OK: no new trading day to process`; all four files unchanged; commit fields added. Watchlist, snapshot and event poll also ran cleanly, with no temp files left.
+
+### Tests (235 pass; 18 new)
+
+- **Interruption at every append** (both before the write and as a half-written line), then a restart: books identical to an uninterrupted run, with no lost day and no duplicate row or fill.
+- **Crash between the rows and the state commit:** recovered, with the removed bytes kept and logged.
+- **Duplicate run on the same day** changes nothing.
+- **Edited committed ledger:** the run stops and touches nothing. **A file shorter than committed** is an error. **Journal edit:** the tamper alert still fires and nothing is truncated.
+- **Atomic state write:** a failed rename keeps the old file and leaves no temp files.
+- **Legacy state** without commit fields loads and runs.
+- **Inputs** are kept for every processed day.
+- `atomic_io`: replace, torn-line repair, mid-file corruption raises; a guard test that no monitoring script uses in-place writes; the backup excludes temp files.
+
+### Persistence choice for the new USD/JPY system: SQLite (stdlib `sqlite3`, version 3.53.4 here; no install)
+
+| | SQLite, WAL, `synchronous=FULL` | Atomic JSON/JSONL files |
+|---|---|---|
+| Multi-record commits (registry row + order + fill + position + notification together) | One transaction: all or nothing | Needs a hand-built commit protocol (as just done for the paper books) |
+| Idempotency (client order ID, setup ID + transition, notification dedup key) | `UNIQUE` constraints reject duplicates (checked here) | Hand-coded checks, easy to get wrong under retries |
+| Append-only enforcement | Triggers can block UPDATE/DELETE on registry tables (checked here); hash chain in columns | By convention only |
+| Concurrent scanner and notifier processes | WAL: readers don't block the writer | Unsafe without locks |
+| Human readability and diff | Binary; needs an export | Plain text |
+| Backup | Must snapshot with the SQLite backup API (never copy a live WAL database) | Plain copy |
+
+**Recommendation: SQLite for the new system's registry, orders, fills, positions, balances and notifications.**
+- Append-only tables with triggers, with mutable "current" views derived from the append-only event rows.
+- A hash chain over registry rows, verified at every start.
+- A nightly JSONL export for audit.
+- A backup-API snapshot taken before each private backup.
+
+The existing paper books stay on their files, now crash-safe, and are not migrated.
+
+### Still unverified
+- A real power loss (only simulated crashes were tested).
+- Concurrent runs of two monitoring scripts on the same file: they're sequential in today's tasks; the new system would need a lock.
