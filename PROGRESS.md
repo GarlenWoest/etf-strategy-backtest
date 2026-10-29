@@ -3,6 +3,21 @@
 _Last updated: 2026-10-28 evening (new development phase: Phase A re-verification done; Phase B waits for the 10-29 run; research pause for strategies still active)_
 
 ## Current phase
+### Master prompt: proactive, measurable trading intelligence system, USD/JPY first (user, 2026-10-29)
+- **Build order:** steps 1–10 with stop points after steps 2, 3, 6, 8 and 9. Deterministic core; no LLM in any decision path; plain-Python notifications. Internal simulator only. Commit locally after each step; don't push.
+- **Step 1, verify: DONE (2026-10-29 18:15 ET).**
+  - **The 10-29 run was about 78 minutes late** (started 18:06 ET) because the Mac was asleep on battery. It ran in brief Power Nap wakes.
+  - **All new steps ran and were recorded.** Snapshot and event poll ok; all three markets DATA OK; exposure column computed.
+  - **The paper step was recorded as an ERROR, but that's false.** The update wrote correct 10-29 values; the script just prints nothing on success.
+  - **The failure notification was never delivered** ("Remote Control inactive"). Claude's push can't reach the phone while you're away.
+  - **Backup:** GitHub equals the local copy, `8d11673` (Sundays only).
+  - 217 tests pass; ledger chain intact; holdout locked.
+  - **Blockers:**
+    - TrueFX folder is empty;
+    - scheduling depends on the Mac being awake;
+    - no notification channel that works without Claude;
+    - your decision on committing the research report (15 mentions of Ohio residence).
+
 ### Next development phase (user instruction 2026-10-28 evening): independent validation, market intelligence, trading readiness
 - **Execution limits:** Phases A and B only this session, stopping after each for approval. Phase B must use the actual 10-29 16:45 ET weekday run. At most one new report per phase. Before Phase D, propose a lightweight arithmetic reference; NautilusTrader or LEAN need separate approval. Commit locally; don't push.
 - **While waiting for the 10-29 run (user-approved, 10-28 evening; no script changes):**
