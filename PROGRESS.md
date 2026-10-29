@@ -29,7 +29,9 @@ _Last updated: 2026-10-28 evening (new development phase: Phase A re-verificatio
 2. **Power settings** for the Mac (see that section).
 3. **Earlier, still open:** gold vehicle and venue; OANDA practice pricing (read-only); the AI-ideas page; any change to the existing Claude tasks. All later, separately approved.
 
-**Exact next step:** on approval, install exactly the plist shown (the only write outside the project, Rule 7 exception), load it with `launchctl bootstrap gui/$(id -u) <plist>`, verify the first unattended scan, notify and score run plus a real test notification, then watch for 10 consecutive clean scans (acceptance J). F002's first month-end decision is the 10-30 close (entry window: 3 FX days after detection).
+**BLOCKER found 10-29 (section 9.1):** Yahoo's terms prohibit automated data collection. The unattended scanner must not poll Yahoo, and the forward pre-registration names Yahoo `JPY=X`. The owner needs to decide on a compliant source: OANDA v20 practice (USD/JPY, GBP/USD) plus Alpaca paper-only data (SPY, GLD). If it changes, record a v0.3 source amendment BEFORE the first forward scan. The existing daily Yahoo use (snapshot, paper books, watchlist) has the same issue.
+
+**Exact next step:** after the data-source decision and plan approval, install exactly the plist shown (the only write outside the project, Rule 7 exception), load it with `launchctl bootstrap gui/$(id -u) <plist>`, verify the first unattended scan, notify and score run plus a real test notification, then watch for 10 consecutive clean scans (acceptance J). F002's first month-end decision is the 10-30 close (entry window: 3 FX days after detection).
 
 **Rules still in force:**
 - no broker, orders or credentials handled by Claude;
