@@ -67,4 +67,4 @@ def test_monitoring_scripts_use_atomic_writes_only():
 def test_backup_excludes_temp_files():
     src = (PROJECT_ROOT / "tools" / "backup_private.py").read_text()
     assert ":(exclude)**/.*.tmp" in src
-    assert ":(exclude)live/usdjpy/registry.sqlite*" in src         # never back up a live WAL database
+    assert ":(exclude)live/usdjpy/*.sqlite*" in src                # never back up a live WAL database
