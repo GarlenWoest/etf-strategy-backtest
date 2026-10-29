@@ -22,6 +22,10 @@ VERSION = "1.0"
 HIGH_IMPACT = ("FOMC", "Employment Situation", "Consumer Price Index", "GDP", "Personal Income", "BoJ Monetary Policy",
                "UK Labour Market", "Consumer price inflation", "GDP monthly estimate")
 EVENT_MARKETS = {"usdjpy": "USDJPY", "gold": "GOLD", "gbpusd": "GBPUSD"}
+INSTRUMENT = {"USDJPY": "JPY=X (indicative)", "GOLD": "GLD (gold reference; not spot gold)", "GBPUSD": "GBPUSD=X (indicative)"}
+NA = "not applicable (information only)"
+NOT_TRADE = dict(setup_id=NA, rule_version="MARKET WATCH v%s" % VERSION, direction=NA, invalidation=NA, target_or_exit=NA,
+                 size=NA, max_planned_loss=NA, estimated_costs=NA, evidence_for=NA, evidence_against=NA, expiry=NA)
 
 
 def _vol_series(closes, window):
@@ -82,10 +86,9 @@ def run(registry, now, bars, snapshot, events_store, cfg):
     status = snapshot.get("status", {})
     for spec, market in EVENT_MARKETS.items():
         o = obs.get(spec, {})
-        base = dict(market=market, instrument=o.get("symbol"), quote_time_et=et(o.get("source_ts_utc")),
+        base = dict(NOT_TRADE, market=market, instrument=INSTRUMENT[market], quote_time_et=et(o.get("source_ts_utc")),
                     reference_price=o.get("last"), price_label="%s (indicative, not executable)" % o.get("freshness", "UNKNOWN"),
                     session=", ".join(snapshot.get("clock", {}).get("active_sessions", []) or []) or "none open",
-                    direction="none (information only)", size="none", max_planned_loss="none", estimated_costs="none",
                     validation_status="MARKET WATCH: informational only, never a paper entry", **{"class": "MARKET WATCH"})
         c = bars.get(market)
         if c is not None and len(c):
@@ -139,9 +142,10 @@ def run(registry, now, bars, snapshot, events_store, cfg):
                                                          "date": e.get("scheduled_date"), "source": e.get("source")},
                               "W003:%s:%s" % (market, eid), now, cfg,
                               "%s within 24 h: %s at %s" % (market, e["title"], when), "LOW",
-                              {"market": market, "class": "MARKET WATCH", "event_time_et": when, "trigger": "W003 v%s" % VERSION,
+                              {**NOT_TRADE, "instrument": INSTRUMENT[market], "market": market, "class": "MARKET WATCH",
+                               "event_time_et": when, "trigger": "W003 v%s" % VERSION,
                                "relevant_events": "%s (%s, official schedule)" % (e["title"], e.get("source")),
-                               "direction": "none (information only)", "validation_status": "MARKET WATCH: informational only",
+                               "validation_status": "MARKET WATCH: informational only, never a paper entry",
                                "why_sent": "high-impact official event within 24 h"}))
     first_mof = not any(r["payload"]["condition"] == "W004" for r in registry.records("market_watch"))
     for kind, rel in (events_store.get("mof_intervention") or {}).items():
@@ -154,9 +158,10 @@ def run(registry, now, bars, snapshot, events_store, cfg):
             continue
         out.append(record(registry, "W004", "USDJPY", {"release": kind, **rel}, key, now, cfg,
                           "MoF intervention release: %s (%s), published %s" % (kind, rel.get("period"), rel.get("published")),
-                          "NORMAL", {"market": "USDJPY", "class": "MARKET WATCH", "event_time_et": rel.get("published"),
+                          "NORMAL", {**NOT_TRADE, "instrument": INSTRUMENT["USDJPY"], "market": "USDJPY", "class": "MARKET WATCH",
+                                     "event_time_et": rel.get("published"),
                                      "trigger": "W004 v%s: new MoF release" % VERSION,
                                      "relevant_events": "Japan MoF %s, period %s (amounts not parsed: UNKNOWN)" % (kind, rel.get("period")),
-                                     "direction": "none (information only)", "validation_status": "MARKET WATCH: informational only",
+                                     "validation_status": "MARKET WATCH: informational only, never a paper entry",
                                      "why_sent": "new official MoF intervention publication"}))
     return out

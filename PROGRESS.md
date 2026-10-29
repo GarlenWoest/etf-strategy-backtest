@@ -5,7 +5,14 @@ _Last updated: 2026-10-28 evening (new development phase: Phase A re-verificatio
 ## Current phase
 ### Master prompt: proactive, measurable trading intelligence system, USD/JPY first (user, 2026-10-29)
 - **Build order:** steps 1–10 with stop points after steps 2, 3, 6, 8 and 9. Deterministic core; no LLM in any decision path; plain-Python notifications. Internal simulator only. Commit locally after each step; don't push.
-- **Step 3, registry + forward-test pre-registration: DONE, STOP for approval of the pre-registration.**
+- **Steps 4–6: DONE; STOP for the owner's one-time channel setup** (section 7 of `reports/phaseH_reliability.md`).
+  - **Step 4:** eligibility and risk gates (ACTIVE/REDUCING/HALTED; all reasons; can only block or shrink) and a kill switch.
+  - **Step 5:** scanner (one transaction per 5-minute slot); F001/F002; MARKET WATCH W001–W005; setup lifecycle.
+  - **Step 6:** plain-Python notifier with Pushover primary and ntfy fallback, quiet hours, retries without duplicates, a daily digest and liveness HIGH alerts.
+  - **Demo runs** use a separate DEMO registry and the local test channel only. The forward registry holds only the pre-registration record until activation (step 9).
+  - 284 tests pass. Acceptance test H is pending.
+- **Pre-registration FROZEN 2026-10-29** (D1–D5 approved). D2 constant: sign +1. D3: 23 trigger days in 2004–2023 (1.2 a year). Hash `763f8dc3…` is recorded in config, the ledger and the registry.
+- **Step 3, registry + forward-test pre-registration: DONE, approved 2026-10-29.**
   - **Registry:** `src/live_usdjpy/registry.py`. SQLite; append-only enforced by triggers; hash chain; idempotency keys; atomic multi-record transactions; snapshot and export. 9 tests, including a process killed mid-transaction.
   - **Backup:** excludes the live database; only snapshots are backed up.
   - **Draft pre-registration:** `research/USDJPY_FORWARD_TEST_PREREG.md` (forward N = 2; historical N = 142 unchanged).

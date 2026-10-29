@@ -314,3 +314,17 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
   entry_window_fx_days: {F001: 1, F002: 3}     # scans after detection during which a gate-blocked setup may still enter
   demo_registry: live/usdjpy/demo_registry.sqlite
   registry: live/usdjpy/registry.sqlite
+  notifications:                    # plain-Python notifier (master prompt step 6); channels need the owner's one-time setup
+    primary: pushover
+    fallback: ntfy
+    quiet_hours_et: ["22:00", "07:00"]        # LOW and NORMAL are held until quiet hours end; HIGH and RISK/SYSTEM alerts never wait
+    digest_time_et: "18:00"
+    digest_grace_minutes: 120                 # no digest delivered by digest time + grace -> HIGH alert
+    scan_gap_hours: 30                        # no successful scan for this long while the FX market is open -> HIGH alert
+    retry_backoff_minutes: [1, 5, 15, 60]
+    max_attempts_per_channel: 5
+    fallback_after_failed_primary: 2
+    pushover: {priority: {HIGH: 2, NORMAL: 0, LOW: -1}, emergency_retry_s: 300, emergency_expire_s: 3600,
+               credentials: "macOS Keychain items 'trading-research-pushover-token' and 'trading-research-pushover-user' (owner sets them; never in files, logs or git)"}
+    ntfy: {server: "https://ntfy.sh", priority: {HIGH: 5, NORMAL: 3, LOW: 2},
+           credentials: "macOS Keychain item 'trading-research-ntfy-topic' (a long random topic name; owner sets it)"}

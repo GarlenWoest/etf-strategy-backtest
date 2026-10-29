@@ -4,6 +4,9 @@
                               (--demo writes to the DEMO registry; the forward registry starts at activation, step 9)
   kill --reason "<text>"      kill switch: HALTED now, flag file live/usdjpy/KILL_SWITCH, HIGH alert queued
   resume --confirm RESUME     manual re-enable only
+  notify [--local-only]       queue the daily digest / liveness alerts if due, then deliver the outbox
+                              (Pushover primary, ntfy fallback; --local-only uses only the local test file channel)
+  test-alert --channel local|pushover|ntfy   send one clearly labelled TEST message through one channel
   verify                      check the registry hash chain
   status                      one-line state summary
 
@@ -25,7 +28,10 @@ sys.path.insert(0, str(ROOT))
 
 import yaml  # noqa: E402
 
+from src import clock as K  # noqa: E402
 from src.live_usdjpy import gate as G  # noqa: E402
+from src.live_usdjpy import lifecycle as LC  # noqa: E402
+from src.live_usdjpy import notify as N  # noqa: E402
 from src.live_usdjpy import scanner as S  # noqa: E402
 from src.live_usdjpy.registry import Registry  # noqa: E402
 
@@ -79,6 +85,28 @@ def main(a):
         G.resume(reg, BASE, a[a.index("--confirm") + 1] if "--confirm" in a else "")
         reg.close()
         print("RESUMED: state ACTIVE (manual)")
+    elif cmd in ("notify", "test-alert"):
+        now = datetime.now(timezone.utc)
+        ncfg = CFG["notifications"]
+        reg = registry(demo)
+        local = N.LocalFile(BASE / ("outbox_local_demo.jsonl" if demo else "outbox_local.jsonl"))
+        named = {"local": local, "pushover": N.Pushover(ncfg["pushover"]), "ntfy": N.Ntfy(ncfg["ntfy"])}
+        if cmd == "test-alert":
+            ch = named[a[a.index("--channel") + 1]]
+            reg.append("notification", LC.alert("NORMAL", "TEST message from trading-research (%s)" % ch.name,
+                                                **{"class": "RISK/SYSTEM ALERT", "event_time_et": LC.et(now),
+                                                   "why_sent": "channel test requested by the owner"}),
+                       idem_key="test:%s:%s" % (ch.name, now.strftime("%Y%m%dT%H%M")), now=now)
+            channels = [ch]
+        else:
+            snap_p = ROOT / "live" / "intel" / "latest.json"
+            snap = json.loads(snap_p.read_text()) if snap_p.exists() else {}
+            N.queue_digest(reg, now, ncfg, snap)
+            N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now))
+            channels = [local] if "--local-only" in a else [named[ncfg["primary"]], named[ncfg["fallback"]]]
+        for nid, outcome in N.dispatch(reg, now, channels, ncfg):
+            print("NOTIFY %s: %s" % (nid, outcome))
+        reg.close()
     elif cmd == "verify":
         reg = registry(demo)
         v = reg.verify()

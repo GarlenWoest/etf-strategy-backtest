@@ -162,3 +162,50 @@ The existing paper books stay on their files, now crash-safe, and are not migrat
 ### Still unverified
 - A real power loss (only simulated crashes were tested).
 - Concurrent runs of two monitoring scripts on the same file: they're sequential in today's tasks; the new system would need a lock.
+
+## 7. Proactive notifications without Claude (master prompt step 6, 2026-10-29)
+
+**Built:** `src/live_usdjpy/notify.py`, plus `notify` and `test-alert` in `tools/usdjpy_pipeline.py`. Plain Python; no Claude session involved, so it costs no Claude usage.
+- **Outbox:** `notification` records in the forward registry; every attempt is an append-only `delivery` record.
+- **Priorities:** HIGH, NORMAL and LOW. Quiet hours (22:00–07:00 ET) hold LOW and NORMAL. HIGH alerts and every RISK/SYSTEM ALERT are never held.
+- **Retries:** backoff of 1, 5, 15 and 60 minutes; the fallback channel is used after 2 failed primary attempts, or at once if the primary rejects the message.
+- **Duplicates:** a message is never resent on a channel that already accepted it. After a crash between sending and recording, NORMAL and LOW messages are not resent; HIGH alerts are.
+- **Daily digest** (LOW, 18:00 ET) confirms the system is alive.
+- **HIGH alerts** fire for a scan gap of more than 30 hours while the FX market is open, and for a digest not delivered by 20:00 ET.
+- **Message format:** every alert lists all the required fields in ET; anything unknown reads UNKNOWN, and fields that don't apply read "not applicable". It's capped at 1,024 characters (Pushover's limit).
+
+**Tests:** 12, all with fake channels; nothing was sent anywhere. Acceptance tests B, K and L pass. **Acceptance test H (real delivery after activation) is PENDING, not passed.**
+
+### Channel comparison (official documentation, read 2026-10-29)
+
+| | **Pushover** | **ntfy (ntfy.sh)** | Telegram bot | Email |
+|---|---|---|---|---|
+| Cost | $4.99 one-time per platform after a 30-day trial; 10,000 messages a month free | Free (no sign-up); paid tiers exist for reserved topics | Free | Free with an existing mailbox |
+| Priorities and quiet hours | -2 to 2. Priority 1 bypasses the phone's quiet hours. **Priority 2 (emergency) repeats until acknowledged** (retry ≥ 30 s, expire ≤ 3 h) | 1–5 (5 = long vibration bursts and a pop-over) | Silent flag only | None |
+| Delivery receipt | **Yes for emergency priority:** a receipt shows whether it was acknowledged | None stated | None for reads; the API only confirms acceptance (sendMessage section not reached on the page read: general knowledge, unverified) | None |
+| Retry guidance | Official: 4xx means don't retry; 5xx or no reply: retry no sooner than 5 s; at most 2 concurrent connections | Not stated on the pages read | Not verified | n/a |
+| Privacy | A token and user key, both private; messages pass through Pushover's servers | **"Everyone can read and write to any topic"** on ntfy.sh; the topic name is effectively the password; messages pass through ntfy.sh | Messages pass through Telegram; needs a bot token | Passes through mail providers |
+| Reliability notes | A commercial service with documented quotas and error semantics | Best-effort public server; can be self-hosted later | A user must start a chat with the bot first | Spam filtering and delays; not suited to urgent alerts |
+
+**Recommendation: Pushover as primary, ntfy as fallback.** Pushover's emergency priority with acknowledgement receipts is the only option here that can prove a HIGH alert was seen. ntfy is free, needs no account, and makes a good independent second path, as long as the topic name is long and random, because ntfy.sh topics are open.
+
+### Your one-time setup (credentials stay with you; never paste them into Claude)
+
+1. **Pushover (primary):**
+   - install the Pushover app on your phone and create an account at pushover.net; your **User Key** is on the dashboard;
+   - at pushover.net/apps/build, create an application named `trading-research` and copy its **API Token**;
+   - in **your own Terminal**, run these two commands; each prompts for the value, so it never appears in shell history:
+     - `security add-generic-password -a "$USER" -s trading-research-pushover-token -w`
+     - `security add-generic-password -a "$USER" -s trading-research-pushover-user -w`
+2. **ntfy (fallback):**
+   - install the ntfy app;
+   - in your Terminal, run `openssl rand -hex 16` and use the output, prefixed with `tr-`, as your topic name;
+   - subscribe to that topic on ntfy.sh in the app;
+   - store it: `security add-generic-password -a "$USER" -s trading-research-ntfy-topic -w`
+3. **Tell me "channels set".** I'll then send exactly one labelled TEST message per channel (`tools/usdjpy_pipeline.py test-alert --channel pushover`, then `--channel ntfy`) and record the results.
+   - The first time, macOS may ask whether `security` may read the item: choose **Always Allow**.
+   - I never see the values.
+
+**Known limits:**
+- Nothing can alert while the notifier itself isn't running (laptop asleep, app closed). That's the scheduling question for step 9.
+- Polling Pushover receipts for HIGH-alert acknowledgement isn't built yet.

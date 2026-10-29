@@ -179,3 +179,12 @@ def test_watch_includes_date_only_events_like_boj(reg):
     assert len(w3) == 1 and w3[0]["date"] == "2026-11-11"
     n = [x for x in kinds(reg, "notification") if "BoJ" in x["title"]]
     assert n and "time not published" in n[0]["fields"]["event_time_et"]
+
+
+def test_watch_alerts_mark_non_applicable_fields(reg):
+    ev = {"e1": {"title": "Consumer Price Index", "status": "SCHEDULED", "scheduled_time_utc": "2026-11-11T13:30:00+00:00",
+                 "scheduled_date": "2026-11-11", "markets_affected": ["usdjpy"], "source": "BLS"}}
+    W.run(reg, NOW, {}, snap(), {"events": ev}, CFG["market_watch"])
+    f = [n for n in kinds(reg, "notification") if "Consumer Price Index" in n["title"]][0]["fields"]
+    assert f["size"].startswith("not applicable") and f["max_planned_loss"].startswith("not applicable")
+    assert f["instrument"].startswith("JPY=X")
