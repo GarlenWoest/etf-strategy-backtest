@@ -209,3 +209,36 @@ The existing paper books stay on their files, now crash-safe, and are not migrat
 **Known limits:**
 - Nothing can alert while the notifier itself isn't running (laptop asleep, app closed). That's the scheduling question for step 9.
 - Polling Pushover receipts for HIGH-alert acknowledgement isn't built yet.
+
+## 8. Paper order manager, simulator, reconciliation, scorer and status page (master prompt steps 7–8, 2026-10-29)
+
+- **Channel tests (10-29):**
+  - **ntfy:** owner-confirmed on the phone. The owner sent it manually at 19:27 ET, not through this system.
+  - **Pushover:** a TEST message sent through the system at 19:29 ET was accepted by the API (HTTP 200, "queued"). **Phone receipt is pending the owner's confirmation.**
+  - Both are recorded as `note` records in the forward registry. The system's own ntfy adapter has not yet sent a real message.
+- **Order manager** (`src/live_usdjpy/paper.py`):
+  - states CREATED → (DENIED | RELEASED → SUBMITTED → FILLED/REJECTED/EXPIRED/CANCELED), each recorded once;
+  - client order ID = sha256(rule | setup | intent | slot)[:16], so a re-run can't create a second order.
+  A gate-approved shadow setup is entered immediately by the internal simulator.
+- **Simulator,** following the frozen pre-registration:
+  - fills at snapshot price × (1 ± c);
+  - financing on the position legs at every 17:00 ET roll (3 days on Wednesday), labelled "estimated, unverified"; with unknown rates, only the admin fee accrues and the record says UNKNOWN;
+  - scan-based exits (invalidation, target, F001 expiry after 2 FX days, F002 at the next month-end evaluation);
+  - per-sub-ledger risk states, with −5% closing everything and stopping that rule's experiment.
+- **Reconciliation** (every scan):
+  1. exact recomputation from the append-only fill and financing records (tolerance one millionth of a dollar);
+  2. fx_engine_v2 replay of the realised position path, compared within a tolerance **fixed in config before any comparison**: 0.02% of starting equity ($2 per $10,000).
+
+  On synthetic paths the v2 difference was $0.71 over 8 FX days (partial-week day-count timing) and $0.03–0.04 over 21 FX days, for long, short and zero rates. Any mismatch → HALTED plus a HIGH alert.
+- **Scorer** (`src/live_usdjpy/scorer.py`):
+  - each closed position is scored once, then marked resolved; predictions are never edited (shown by the hash chain);
+  - net returns under base and stress costs;
+  - baselines over the same window and size: cash, always long, historical sample mean, simple trend, and a placebo for F001;
+  - directional accuracy and error against no-change; calibration UNKNOWN;
+  - a power banner on every table, and no statistics below 30 resolved signals.
+- **Status page:** `live/usdjpy/STATUS.md` (`STATUS_DEMO.md` for demo runs). It covers system state, markets, open positions, opportunity history with notification delivery by channel, and the scorecard.
+- **Tests:** 296 pass. Acceptance E, F and I pass on synthetic fixtures; H and J are still pending.
+- **Not yet built:**
+  - the event-in-window breakdown;
+  - polling Pushover acknowledgements;
+  - a scheduler (step 9).

@@ -7,6 +7,8 @@
   notify [--local-only]       queue the daily digest / liveness alerts if due, then deliver the outbox
                               (Pushover primary, ntfy fallback; --local-only uses only the local test file channel)
   test-alert --channel local|pushover|ntfy   send one clearly labelled TEST message through one channel
+  score                       score closed paper positions (once each) and write the status page
+                              live/usdjpy/STATUS.md (STATUS_DEMO.md with --demo)
   verify                      check the registry hash chain
   status                      one-line state summary
 
@@ -107,6 +109,19 @@ def main(a):
         for nid, outcome in N.dispatch(reg, now, channels, ncfg):
             print("NOTIFY %s: %s" % (nid, outcome))
         reg.close()
+    elif cmd == "score":
+        from src.live_usdjpy import scorer as SC
+        sys.path.insert(0, str(ROOT / "tools"))
+        from atomic_io import write_text
+        now = datetime.now(timezone.utc)
+        reg = registry(demo)
+        new = SC.score_closed(reg, CFG, now)
+        snap_p = ROOT / "live" / "intel" / "latest.json"
+        snap = json.loads(snap_p.read_text()) if snap_p.exists() else {}
+        page = BASE / ("STATUS_DEMO.md" if demo else "STATUS.md")
+        write_text(page, SC.status_page(reg, CFG, now, snap, BASE, "demo" if demo else "forward"))
+        reg.close()
+        print("SCORE OK: %d newly scored; status page %s" % (len(new), page.relative_to(ROOT)))
     elif cmd == "verify":
         reg = registry(demo)
         v = reg.verify()

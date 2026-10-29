@@ -5,7 +5,15 @@ _Last updated: 2026-10-28 evening (new development phase: Phase A re-verificatio
 ## Current phase
 ### Master prompt: proactive, measurable trading intelligence system, USD/JPY first (user, 2026-10-29)
 - **Build order:** steps 1–10 with stop points after steps 2, 3, 6, 8 and 9. Deterministic core; no LLM in any decision path; plain-Python notifications. Internal simulator only. Commit locally after each step; don't push.
-- **Steps 4–6: DONE; STOP for the owner's one-time channel setup** (section 7 of `reports/phaseH_reliability.md`).
+- **Steps 7–8: DONE, STOP for review** (section 8 of `reports/phaseH_reliability.md`).
+  - **Paper order manager** with idempotent client order IDs.
+  - **Internal simulator** following the frozen conventions.
+  - **Reconciliation** every scan: exact recomputation plus engine-v2 parity within a pre-fixed $2 per $10,000.
+  - **Scorer** with baselines and a power banner, plus the status page `live/usdjpy/STATUS.md`.
+  - **Channels:** ntfy owner-confirmed; Pushover accepted by the API, phone receipt pending.
+  - 296 tests pass.
+  - **Still pending:** acceptance H and J, and the step 9 scheduler (needs approval).
+- **Steps 4–6: DONE; channels set by the owner 2026-10-29** (section 7 of `reports/phaseH_reliability.md`).
   - **Step 4:** eligibility and risk gates (ACTIVE/REDUCING/HALTED; all reasons; can only block or shrink) and a kill switch.
   - **Step 5:** scanner (one transaction per 5-minute slot); F001/F002; MARKET WATCH W001–W005; setup lifecycle.
   - **Step 6:** plain-Python notifier with Pushover primary and ntfy fallback, quiet hours, retries without duplicates, a daily digest and liveness HIGH alerts.

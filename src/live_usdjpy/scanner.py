@@ -114,7 +114,9 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                      "bars": {s: {"last_date": (b.index[-1].date().isoformat() if b is not None and len(b) else None),
                                   "last_close": (float(b.iloc[-1]) if b is not None and len(b) else None), "n": (len(b) if b is not None else 0)}
                               for s, b in (("JPY=X", fx), ("SPY", spy), ("GLD", watch_bars["GOLD"]), ("GBPUSD=X", watch_bars["GBPUSD"]))},
-                     "events_generated_utc": inp.events_store.get("generated_utc")}
+                     "events_generated_utc": inp.events_store.get("generated_utc"),
+                     "usdjpy_sma20": (float(fx.iloc[-20:].mean()) if fx is not None and len(fx) >= 20 else None),
+                     "usdjpy_sessions": (inp.snapshot.get("clock") or {}).get("active_sessions")}
         state_rec["inputs_sha256"] = digest(state_rec)
         registry.append("market_state", state_rec, now=now)
         kill_on = G.kill_flag_path(base_dir).exists()
