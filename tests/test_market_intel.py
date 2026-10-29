@@ -134,8 +134,8 @@ def test_isolation_research_code_never_uses_market_intel_or_live():
     offenders = []
     for p in list((PROJECT_ROOT / "src").rglob("*.py")) + list((PROJECT_ROOT / "tools").glob("*.py")):
         rel = str(p.relative_to(PROJECT_ROOT))
-        if rel in allowed:
-            continue
+        if rel in allowed or rel.startswith("src/live_usdjpy/"):   # forward system: monitoring side by design; research
+            continue                                                 # never imports it (tests/test_live_usdjpy_registry.py)
         if any("market_intel" in x for x in _imports(p)):
             offenders.append(rel)
         mentions_live = '"live"' in p.read_text() or "'live'" in p.read_text() or "live/" in p.read_text()

@@ -25,7 +25,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 KINDS = ("scan_run", "market_state", "evaluation", "setup_transition", "risk_state", "order_event", "fill",
-         "position_snapshot", "reconciliation", "outcome", "notification", "kill_switch", "preregistration", "note")
+         "position_snapshot", "reconciliation", "outcome", "notification", "kill_switch", "preregistration", "note",
+         "market_watch", "delivery")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS records (

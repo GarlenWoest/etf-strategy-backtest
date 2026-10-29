@@ -300,3 +300,17 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     drawdown_close_all_stop: -0.05
     stale_data: "hard block: entry needs USD/JPY LIVE (<=180 s) and specialist status DATA OK"
     event_blackout_minutes: {before: 60, after: 30}
+  # --- operational settings (not part of the frozen test; may change with a ledger note) ---
+  market_watch:
+    version: "1.0"
+    max_per_market_per_day: 3
+    big_move_sd: 2.0                # W001: |daily return| > 2 x 20-day vol (prior days)
+    vol_window: 20
+    regime_ratio_up: 1.5            # W002: 20-day vol above 1.5 x its 250-day median = HIGH-VOL regime; back below 1.0 x = normal
+    regime_ratio_down: 1.0
+    regime_lookback: 250
+    event_horizon_hours: 24         # W003
+    markets: {USDJPY: "JPY=X", GOLD: "GLD", GBPUSD: "GBPUSD=X"}
+  entry_window_fx_days: {F001: 1, F002: 3}     # scans after detection during which a gate-blocked setup may still enter
+  demo_registry: live/usdjpy/demo_registry.sqlite
+  registry: live/usdjpy/registry.sqlite
