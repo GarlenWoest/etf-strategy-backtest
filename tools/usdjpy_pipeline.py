@@ -96,7 +96,8 @@ def main(a):
         if cmd == "test-alert":
             ch = named[a[a.index("--channel") + 1]]
             reg.append("notification", LC.alert("NORMAL", "TEST message from trading-research (%s)" % ch.name,
-                                                **{"class": "RISK/SYSTEM ALERT", "event_time_et": LC.et(now),
+                                                summary="TEST | %s channel works | no action needed" % ch.name,
+                                                **{"class": "TEST", "event_time_et": LC.et(now),
                                                    "why_sent": "channel test requested by the owner"}),
                        idem_key="test:%s:%s" % (ch.name, now.strftime("%Y%m%dT%H%M")), now=now)
             channels = [ch]

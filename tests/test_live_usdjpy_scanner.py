@@ -68,7 +68,7 @@ def test_trigger_creates_one_setup_and_one_complete_alert(reg, tmp_path):
     S.run_scan(reg, NOW, inputs(fx_shock=-0.02, spy_shock=-0.05), CFG, tmp_path)
     tr = kinds(reg, "setup_transition")
     assert [(t["setup_id"], t["state"]) for t in tr] == [("F001-2026-11-09", "triggered"), ("F001-2026-11-09", "entered")]
-    alerts = [n for n in kinds(reg, "notification") if n["fields"]["setup_id"] == "F001-2026-11-09"]
+    alerts = [n for n in kinds(reg, "notification") if n["fields"].get("setup_id") == "F001-2026-11-09"]
     assert [a["priority"] for a in alerts] == ["NORMAL", "NORMAL"]
     f = alerts[0]["fields"]
     assert set(f) == set(LC.ALERT_FIELDS)
@@ -89,7 +89,7 @@ def test_B_and_G_reruns_and_later_scans_do_not_duplicate_or_spam(reg, tmp_path):
     assert reg.count() == n
     S.run_scan(reg, NOW + timedelta(minutes=30), inp, CFG, tmp_path)               # a later scan, same bar
     assert [t["state"] for t in kinds(reg, "setup_transition")] == ["triggered", "entered"]
-    assert len([x for x in kinds(reg, "notification") if x["fields"]["setup_id"] == "F001-2026-11-09"]) == 2
+    assert len([x for x in kinds(reg, "notification") if x["fields"].get("setup_id") == "F001-2026-11-09"]) == 2
     assert len([f for f in kinds(reg, "fill") if f["type"] == "trade"]) == 1                 # exactly one order filled
 
 
@@ -101,7 +101,7 @@ def test_G_blocked_once_then_expired_without_spam(reg, tmp_path):
     later = NOW + timedelta(days=2)                                              # Thu: entry window (1 FX day) passed
     S.run_scan(reg, later, inputs(fx_shock=-0.02, spy_shock=-0.05, fresh="STALE"), CFG, tmp_path)
     assert [t["state"] for t in kinds(reg, "setup_transition")] == ["triggered", "blocked", "expired"]
-    notifs = [n for n in kinds(reg, "notification") if n["fields"]["setup_id"] == "F001-2026-11-09"]
+    notifs = [n for n in kinds(reg, "notification") if n["fields"].get("setup_id") == "F001-2026-11-09"]
     assert [n["priority"] for n in notifs] == ["NORMAL", "LOW", "LOW"]
 
 
@@ -189,5 +189,5 @@ def test_watch_alerts_mark_non_applicable_fields(reg):
                  "scheduled_date": "2026-11-11", "markets_affected": ["usdjpy"], "source": "BLS"}}
     W.run(reg, NOW, {}, snap(), {"events": ev}, CFG["market_watch"])
     f = [n for n in kinds(reg, "notification") if "Consumer Price Index" in n["title"]][0]["fields"]
-    assert f["size"].startswith("not applicable") and f["max_planned_loss"].startswith("not applicable")
-    assert f["instrument"].startswith("JPY=X")
+    assert "size" not in f and "max_planned_loss" not in f and "invalidation" not in f     # not applicable: omitted
+    assert f["instrument"].startswith("JPY=X") and "UNKNOWN" not in f.values()

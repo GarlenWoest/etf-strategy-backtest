@@ -35,10 +35,21 @@ def et(ts):
     return ts.astimezone(NY).strftime("%Y-%m-%d %H:%M ET")
 
 
-def alert(priority, title, **fields):
-    """A complete alert payload: every field present, missing ones UNKNOWN."""
-    body = {k: (fields.get(k) if fields.get(k) not in (None, "") else "UNKNOWN") for k in ALERT_FIELDS}
-    return {"status": "queued", "priority": priority, "title": title, "fields": body}
+FULL_CLASSES = ("EXPERIMENTAL IDEA (shadow ledger)", "APPROVED PAPER CANDIDATE")
+
+
+def alert(priority, title, summary=None, **fields):
+    """Alert payload. EXPERIMENTAL IDEA and APPROVED PAPER CANDIDATE alerts carry the full field list (a field that
+    applies but is not known reads UNKNOWN). Every other class (RISK/SYSTEM ALERT, MARKET WATCH, PAPER POSITION
+    UPDATE, TEST) carries only the fields that apply: those passed in, minus any marked "not applicable"; a field
+    passed as None means "applies but unknown" and reads UNKNOWN. `summary` is the one-line lock-screen text."""
+    cls = fields.get("class")
+    na = lambda v: isinstance(v, str) and v.lower().startswith("not applicable")
+    if cls in FULL_CLASSES:
+        body = {k: (fields.get(k) if fields.get(k) not in (None, "") else "UNKNOWN") for k in ALERT_FIELDS}
+    else:
+        body = {k: (v if v not in (None, "") else "UNKNOWN") for k, v in fields.items() if k in ALERT_FIELDS and not na(v)}
+    return {"status": "queued", "priority": priority, "title": title, "summary": summary, "fields": body}
 
 
 def current(registry, setup_id):

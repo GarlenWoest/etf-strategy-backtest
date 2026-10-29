@@ -30,22 +30,48 @@ MAX_LEN = 1024                                   # Pushover message limit (UTF-8
 
 # ---------------------------------------------------------------- rendering
 
+ORDER = ("market", "instrument", "setup_id", "rule_version", "event_time_et", "quote_time_et", "reference_price",
+         "price_label", "session", "direction", "trigger", "invalidation", "target_or_exit", "size",
+         "max_planned_loss", "estimated_costs", "relevant_events", "evidence_for", "evidence_against",
+         "validation_status", "expiry", "why_sent")
+SHORT_CLASS = {"EXPERIMENTAL IDEA (shadow ledger)": "EXPERIMENTAL IDEA", "APPROVED PAPER CANDIDATE": "PAPER CANDIDATE",
+               "RISK/SYSTEM ALERT": "SYSTEM", "MARKET WATCH": "WATCH", "PAPER POSITION UPDATE": "PAPER POSITION"}
+
+
+def _v(v):
+    return "%.3f" % v if isinstance(v, float) else str(v)
+
+
+def summary_line(payload):
+    """One line for the lock screen: priority, class, market, what happened, the key number, validation."""
+    if payload.get("summary"):
+        return payload["summary"][:200]
+    f = payload.get("fields") or {}
+    parts = ["%s %s" % (payload.get("priority", ""), SHORT_CLASS.get(f.get("class"), f.get("class") or "INFO"))]
+    if f.get("market"):
+        parts.append(f["market"])
+    parts.append(payload.get("title", ""))
+    if f.get("class") in ("EXPERIMENTAL IDEA (shadow ledger)", "APPROVED PAPER CANDIDATE"):
+        if f.get("reference_price") not in (None, "UNKNOWN"):
+            parts.append("ref %s" % _v(f["reference_price"]))
+        if f.get("invalidation") not in (None, "UNKNOWN"):
+            parts.append("inv %s" % _v(f["invalidation"]))
+        parts.append("NOT VALIDATED")
+    return " | ".join(p for p in parts if p)[:200]
+
+
 def render(payload):
-    """Title and plain-text body. Every alert field appears; missing values read UNKNOWN; times are ET."""
+    """Title and plain-text body. Line 1 is a one-line summary (lock screen). Then the alert's fields: the full list
+    for EXPERIMENTAL IDEA / APPROVED PAPER CANDIDATE, only the applicable ones otherwise. Times are ET."""
     f = payload.get("fields") or {}
     title = payload.get("title", "")[:250]
+    lines = [summary_line(payload)]
     if f:
-        lines = ["[%s] %s" % (payload.get("priority"), f.get("class", "UNKNOWN"))]
-        order = ("market", "instrument", "setup_id", "rule_version", "event_time_et", "quote_time_et", "reference_price",
-                 "price_label", "session", "direction", "trigger", "invalidation", "target_or_exit", "size",
-                 "max_planned_loss", "estimated_costs", "relevant_events", "evidence_for", "evidence_against",
-                 "validation_status", "expiry", "why_sent")
-        for k in order:
-            v = f.get(k, "UNKNOWN")
-            lines.append("%s: %s" % (k.replace("_", " "), "%.3f" % v if isinstance(v, float) else v))
-        body = "\n".join(lines)
+        lines.append("class: %s" % f.get("class", "UNKNOWN"))
+        lines += ["%s: %s" % (k.replace("_", " "), _v(f[k])) for k in ORDER if k in f]
     else:
-        body = payload.get("body", "UNKNOWN")
+        lines.append(payload.get("body", "UNKNOWN"))
+    body = "\n".join(lines)
     body += "\nNot financial advice. Paper/shadow only; no orders."
     if len(body) > MAX_LEN:
         body = body[: MAX_LEN - 40] + "\n[truncated; full record in registry]"

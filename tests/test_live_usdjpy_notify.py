@@ -51,10 +51,25 @@ def test_B_one_notification_per_setup_and_delivery_recorded(reg):
     assert [d["result"] for d in N.deliveries(reg, nid)] == ["attempting", "sent"]
 
 
-def test_message_has_all_fields_unknowns_and_fits_pushover():
-    title, body = N.render(LC.alert("NORMAL", "x", market="USDJPY", reference_price=150.123456))
-    assert "reference price: 150.123" in body and "invalidation: UNKNOWN" in body and len(body) <= N.MAX_LEN
-    assert "why sent: UNKNOWN" in body and "Not financial advice" in body
+def test_message_format_full_list_only_for_ideas_and_candidates_summary_first():
+    idea = LC.alert("NORMAL", "F001-2026-11-09 TRIGGERED", **{"class": "EXPERIMENTAL IDEA (shadow ledger)", "market": "USDJPY",
+                                                             "reference_price": 150.123456, "invalidation": 147.0})
+    title, body = N.render(idea)
+    lines = body.splitlines()
+    assert lines[0].startswith("NORMAL EXPERIMENTAL IDEA | USDJPY | F001-2026-11-09 TRIGGERED") and "NOT VALIDATED" in lines[0]
+    assert len(lines[0]) <= 200                                         # one line for the lock screen
+    assert "reference price: 150.123" in body and "evidence against: UNKNOWN" in body   # full list; applies but unknown
+    assert len(body) <= N.MAX_LEN and "Not financial advice" in body
+    for cls in ("RISK/SYSTEM ALERT", "MARKET WATCH", "TEST", "PAPER POSITION UPDATE"):
+        a = LC.alert("HIGH", "x", **{"class": cls, "market": "USDJPY", "event_time_et": "2026-11-10 16:45 ET",
+                                     "size": "not applicable (information only)", "why_sent": "y"})
+        t, b = N.render(a)
+        assert "size:" not in b and "invalidation" not in b and "evidence for" not in b, cls      # omitted, not UNKNOWN
+        assert "UNKNOWN" not in b and "why sent: y" in b
+    sysal = LC.alert("HIGH", "data outage", **{"class": "RISK/SYSTEM ALERT", "quote_time_et": None})
+    assert "quote time et: UNKNOWN" in N.render(sysal)[1]            # applies (passed) but not known -> UNKNOWN
+    test = LC.alert("NORMAL", "TEST", summary="TEST | pushover channel works | no action needed", **{"class": "TEST"})
+    assert N.render(test)[1].splitlines()[0] == "TEST | pushover channel works | no action needed"
 
 
 def test_retry_with_backoff_then_fallback_without_duplicates(reg):

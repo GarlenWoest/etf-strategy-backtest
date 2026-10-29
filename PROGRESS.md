@@ -3,6 +3,40 @@
 _Last updated: 2026-10-28 evening (new development phase: Phase A re-verification done; Phase B waits for the 10-29 run; research pause for strategies still active)_
 
 ## Current phase
+### HANDOFF (2026-10-29 evening): read this first if continuing in a new session
+**Where we are:** the master prompt "proactive, measurable trading intelligence system (USD/JPY first)", steps 1–8 are DONE. **Next: step 9 (scheduler) — plan presented, awaiting the owner's approval; NOTHING installed.**
+
+**Done (all committed locally; nothing pushed since GitHub main `3c51573`):**
+- **Reliability:** atomic writes in every monitoring script (`tools/atomic_io.py`); the paper books commit per day with recovery and keep their inputs. Replay proofs pass.
+- **Forward registry:** `src/live_usdjpy/registry.py`, SQLite at `live/usdjpy/registry.sqlite`. It holds the pre-registration record, the channel tests and notes, and **no scans yet**.
+- **Frozen pre-registration:** `research/USDJPY_FORWARD_TEST_PREREG.md` (sha256 `763f8dc3…`). F001 RO-REV v0.2 and F002 TSM12 v0.2; forward N = 2; historical N = 142 unchanged. The D1 data guard is in `config.yaml live_usdjpy.data_governance`.
+- **Package `src/live_usdjpy/`:**
+  - `gate.py` (eligibility, risk, kill switch);
+  - `rules.py`;
+  - `lifecycle.py` (setups and alert construction);
+  - `watch.py` (W001–W005);
+  - `scanner.py` (one transaction per 5-minute slot);
+  - `paper.py` (orders, simulator, reconciliation);
+  - `scorer.py` (scores and `STATUS.md`);
+  - `notify.py` (Pushover primary, ntfy fallback, local test channel).
+  - CLI: `tools/usdjpy_pipeline.py scan|notify|score|kill|resume|verify|status|test-alert` (`--demo` uses `live/usdjpy/demo_registry.sqlite`).
+- **Channels:** both **delivered** 10-29. Pushover was confirmed by the owner at 19:29 ET; ntfy by the owner's own test at 19:27 ET. The system's own ntfy sender hasn't been exercised.
+- **Alert format (10-29):** the full field list only for EXPERIMENTAL IDEA and APPROVED PAPER CANDIDATE alerts; other classes show only the fields that apply. Line 1 is a lock-screen summary.
+- **Tests:** 296 pass. Acceptance tests A–G, I, K, L pass on synthetic fixtures; **H and J are pending** (they need the scheduler).
+
+**Open decisions for the owner:**
+1. **Step 9 scheduler:** approve the LaunchAgent plan (plist shown in chat 10-29 and in `reports/phaseH_reliability.md` section 9), or choose otherwise.
+2. **Power settings** for the Mac (see that section).
+3. **Earlier, still open:** gold vehicle and venue; OANDA practice pricing (read-only); the AI-ideas page; any change to the existing Claude tasks. All later, separately approved.
+
+**Exact next step:** on approval, install exactly the plist shown (the only write outside the project, Rule 7 exception), load it with `launchctl bootstrap gui/$(id -u) <plist>`, verify the first unattended scan, notify and score run plus a real test notification, then watch for 10 consecutive clean scans (acceptance J). F002's first month-end decision is the 10-30 close (entry window: 3 FX days after detection).
+
+**Rules still in force:**
+- no broker, orders or credentials handled by Claude;
+- holdout locked; research pause; no LLM in any decision path;
+- commit locally, never push;
+- private data stays in `live/`, `paper/` and `briefs/`.
+
 ### Master prompt: proactive, measurable trading intelligence system, USD/JPY first (user, 2026-10-29)
 - **Build order:** steps 1–10 with stop points after steps 2, 3, 6, 8 and 9. Deterministic core; no LLM in any decision path; plain-Python notifications. Internal simulator only. Commit locally after each step; don't push.
 - **Steps 7–8: DONE, STOP for review** (section 8 of `reports/phaseH_reliability.md`).
