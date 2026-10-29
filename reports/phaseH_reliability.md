@@ -242,3 +242,129 @@ The existing paper books stay on their files, now crash-safe, and are not migrat
   - the event-in-window breakdown;
   - polling Pushover acknowledgements;
   - a scheduler (step 9).
+
+## 9. Step 9: scheduler recommendation and install plan (2026-10-29; NOTHING installed)
+
+### 9.1 Blocking finding: Yahoo's terms
+- **What the terms say.** Yahoo's Terms of Service (legal.yahoo.com, read 2026-10-29) list among prohibited actions:
+  - to "access or collect data, or attempt to access or collect data, from our Services using any automated means (including … robots, spiders, scrapers, data mining tools)" (section 2(d), item 9);
+  - to use them "to create any database, archive, … data feed" (item 10).
+- **Why it matters.** `yfinance` is an unofficial client of Yahoo's website. **An unattended scanner polling Yahoo would conflict with these terms.**
+- **Wider scope.** The same applies, at lower frequency, to the existing daily snapshot, the paper books and the watchlist. Phase B had labelled Yahoo "uncertain"; it's now read.
+- **The frozen pre-registration names Yahoo `JPY=X` as its price source.** The forward registry has **no scans yet**, so changing the source before the first scan, as a recorded v0.3 amendment, doesn't bias the test.
+
+**Compliant sources:**
+
+| Need | Compliant source | Status |
+|---|---|---|
+| USD/JPY, GBP/USD live and daily bid/ask | OANDA v20 practice API (official; internal-use licence) | Owner opens a practice account and stores the token in Keychain (decision pending since 10-28) |
+| SPY (F001's second leg), GLD (gold reference) | Alpaca market-data API with a free paper-only account (IEX feed) | Owner creates the account and keys |
+| Official references | Fed H.10, ECB, FRED (API key) | Already used for checks |
+| Events | Fed, BLS, BEA, BoJ, ONS, MoF official pages | Already compliant (polite polling) |
+
+### 9.2 Recommendation: macOS LaunchAgent (not hosted)
+
+| | LaunchAgent (recommended) | Hosted worker (GitHub Actions on the private repo, or a small VPS) |
+|---|---|---|
+| Cost | $0 | Actions: free minutes; VPS ≈ $4–6 a month |
+| Secrets | Stay in your login Keychain | Must be copied to the host |
+| Availability | Only while the Mac is awake and you're logged in; not 24/7 | 24/7 |
+| Recovery | Missed runs coalesce into one run on wake; catch-up logic below | Native |
+| Security and privacy | Data never leaves the Mac except alerts | Private data and prices live on third-party infrastructure; the registry needs a persistent store |
+| Claude usage | None | None |
+
+### 9.3 The plist (the only file written outside the project; Rule 7 exception)
+
+`~/Library/LaunchAgents/local.trading-research.usdjpy-runner.plist`:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.trading-research.usdjpy-runner</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ROOT}}/.venv/bin/python</string>
+    <string>-I</string>
+    <string>{{ROOT}}/tools/usdjpy_pipeline.py</string>
+    <string>run</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>{{ROOT}}</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Minute</key><integer>2</integer></dict>
+    <dict><key>Minute</key><integer>17</integer></dict>
+    <dict><key>Minute</key><integer>32</integer></dict>
+    <dict><key>Minute</key><integer>47</integer></dict>
+  </array>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>Nice</key>
+  <integer>10</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>{{ROOT}}/live/usdjpy/logs/runner.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ROOT}}/live/usdjpy/logs/runner.err.log</string>
+</dict>
+</plist>
+```
+- **Why `StartCalendarInterval`:** per `man launchd.plist`, `StartInterval` **skips** intervals that fall while the Mac is asleep. `StartCalendarInterval` "will start the job the next time the computer wakes up", **coalescing** missed intervals into one run.
+- **`RunAtLoad` is false** (the man page advises against it); the first run is started explicitly.
+- **No secrets in the plist:** credentials stay in Keychain items that the runner reads at run time.
+
+### 9.4 Cadence (decided inside `run`; the agent fires at :02, :17, :32 and :47)
+
+| Work | When | Notes |
+|---|---|---|
+| Deliver the notification outbox, liveness checks, digest | Every fire | Digest at 18:00 ET; HIGH alert on a scan gap of more than 30 h while FX is open, or on a missing digest |
+| Full scan (rules, gate, paper, watch, reconciliation), then score and status page | Hourly at :02 during the FX week; every fire while a position is open or a setup is triggered or blocked; the first fire after 00:00 UTC (new daily bar) and the first after 17:05 ET (after the roll) | **Only after a compliant price source is approved (9.1).** No scans while FX is closed, apart from one check after Sunday 17:00 ET |
+| Official event poll | 06:00, 09:00, 13:00, 16:40 ET, plus 5 minutes after each scheduled release | About 12 polite requests per poll. BLS needs its contact address: the agent doesn't read `~/.zshenv`, so either store it in Keychain as `trading-research-bls-contact` or BLS is skipped from the agent (the Claude weekday task still polls it) |
+| Score and status page | After each scan | `live/usdjpy/STATUS.md` |
+
+- **Concurrency:** a file lock (`live/usdjpy/runner.lock`); if the previous run is still going, the new one exits.
+- **Logs:** truncated above 5 MB. `live/usdjpy/logs/` is backed up privately but never published.
+
+### 9.5 Sleep, wake and catch-up (no 24/7 claim)
+- **Mac asleep or logged out:** nothing runs and nothing can alert. The phone hears nothing until the next wake.
+- **On wake:** launchd starts one coalesced run. The runner then:
+  1. records a `scan_run` gap record (last successful run → now; whether the Mac was asleep, read from `pmset -g log`);
+  2. **evaluates every completed daily bar since the last evaluated one** (F001 per missed bar; F002 for the most recent month-end not yet evaluated). Such signals are recorded and alerted as **DETECTED LATE (system was not running at bar completion)**, never as live detections.
+  3. Entries still need a LIVE price at the time of entry, all gates, and the pre-registered entry window counted from detection.
+- **Watchdog (optional, off):** a dead-man's switch (e.g. a free healthchecks.io check that alerts when pings stop) is the only way to hear about a sleeping Mac. It needs your account and sends only a ping. Not proposed now.
+
+### 9.6 Power settings (yours to apply; current AC values read 10-29: `sleep 1`, `displaysleep 120`, `powernap 1`)
+- Keep the Mac **plugged in** with the **lid open**, or closed only with an external display (clamshell).
+- **AC only, no system sleep:** run `sudo pmset -c sleep 0`, or turn on System Settings › Battery › Options › "Prevent automatic sleeping on power adapter when the display is off". To revert: `sudo pmset -c sleep 1`.
+- Battery settings unchanged: on battery the Mac may sleep and runs will be missed. That's recorded and alerted at wake.
+- Power Nap ran the Claude task in brief wakes on 10-29 but **can't be relied on**.
+
+### 9.7 Install, verify, stop, uninstall (after approval; commands shown in advance)
+- **Install:**
+  - write the plist above exactly;
+  - `plutil -lint ~/Library/LaunchAgents/local.trading-research.usdjpy-runner.plist`;
+  - `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.trading-research.usdjpy-runner.plist`;
+  - first run: `launchctl kickstart -k gui/$(id -u)/local.trading-research.usdjpy-runner`.
+- **Verify:**
+  - `launchctl print gui/$(id -u)/local.trading-research.usdjpy-runner` (state and last exit code);
+  - the logs;
+  - `tools/usdjpy_pipeline.py status`;
+  - one real test notification through the runner;
+  - then 10 consecutive clean scheduled scans (acceptance J).
+- **Pause without uninstalling:** `launchctl bootout gui/$(id -u)/local.trading-research.usdjpy-runner`, or the kill switch, which halts entries only.
+- **Uninstall:** run the `bootout` above, then `rm ~/Library/LaunchAgents/local.trading-research.usdjpy-runner.plist`.
+
+### 9.8 Timeline for the 10-30 month-end
+- **Detection.** F002's 10-30 bar completes at 00:00 UTC on 10-31 (Fri 20:00 ET), after the FX market has closed. It's detected at the first scan after that. Entries are blocked until FX reopens on Sunday at 17:00 ET, and until 19:00 ET (thin-hours guard).
+- **Window.** The entry window is 3 FX days from detection. Tue 11-03 is a Japanese holiday (guard).
+- **With the catch-up logic (9.5), activating by Mon 11-02 still captures the 10-30 decision**, as long as a compliant price source is live by then.
