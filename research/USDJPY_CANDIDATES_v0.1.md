@@ -1,5 +1,7 @@
 # USD/JPY candidate rules v0.1 and paper risk limits (draft, 2026-10-28)
 
+_Superseded for the forward test by v0.2 in `research/USDJPY_FORWARD_TEST_PREREG.md` (2026-10-29): corrected rationales, exclusions, baselines and power estimates; the trading parameters are unchanged. This file is kept as written._
+
 **EXPERIMENTAL SHADOW SIGNALS. Not financial advice. Not validated. Not pre-registered trials.**
 
 These are drafts for a forward-only shadow workflow (`research/USDJPY_PIPELINE_DESIGN.md`).

@@ -19,7 +19,8 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 ALLOWED = ("paper/", "live/", "briefs/")
-EXCLUDE = (":(exclude)live/events/cache/**", ":(exclude)**/.*.tmp")   # + temp files of interrupted atomic writes    # Phase H: cached official web pages are re-fetchable; not backed up
+EXCLUDE = (":(exclude)live/events/cache/**", ":(exclude)**/.*.tmp",   # + temp files of interrupted atomic writes
+           ":(exclude)live/usdjpy/registry.sqlite*")   # live SQLite db and its WAL/SHM: only the backup-API snapshot is backed up    # Phase H: cached official web pages are re-fetchable; not backed up
 NAME, EMAIL = "Garlen Woest", "324629888+GarlenWoest@users.noreply.github.com"
 ET = ZoneInfo("America/New_York")
 

@@ -5,7 +5,14 @@ _Last updated: 2026-10-28 evening (new development phase: Phase A re-verificatio
 ## Current phase
 ### Master prompt: proactive, measurable trading intelligence system, USD/JPY first (user, 2026-10-29)
 - **Build order:** steps 1–10 with stop points after steps 2, 3, 6, 8 and 9. Deterministic core; no LLM in any decision path; plain-Python notifications. Internal simulator only. Commit locally after each step; don't push.
-- **Step 2, reliability: DONE, STOP for review.** Section 6 of `reports/phaseH_reliability.md`.
+- **Step 3, registry + forward-test pre-registration: DONE, STOP for approval of the pre-registration.**
+  - **Registry:** `src/live_usdjpy/registry.py`. SQLite; append-only enforced by triggers; hash chain; idempotency keys; atomic multi-record transactions; snapshot and export. 9 tests, including a process killed mid-transaction.
+  - **Backup:** excludes the live database; only snapshots are backed up.
+  - **Draft pre-registration:** `research/USDJPY_FORWARD_TEST_PREREG.md` (forward N = 2; historical N = 142 unchanged).
+  - **Corrected rationales:** RO-REV re-grounded in deleveraging overshoot; TSM12 is a low-prior control with a sample-mean null.
+  - **Power:** neither rule can be validated within a decade.
+  - **Decisions D1–D5 pending.**
+- **Step 2, reliability: DONE, approved 2026-10-29.** Price-leak fix applied (amended unpushed commit; scan clean). The owner's research report is git-ignored. Section 6 of `reports/phaseH_reliability.md`.
   - **Atomic writes everywhere.** The paper update now commits day by day and recovers from interruptions without duplicate rows or fills.
   - **Inputs are kept per day,** and every update ends with an explicit OK/ERROR line.
   - **Proofs:** old and new code give identical outputs. The real `values.csv` is reproduced byte for byte; trades match except one 4th-decimal price.
