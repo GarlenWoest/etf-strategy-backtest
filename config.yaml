@@ -270,3 +270,33 @@ usdjpy_study1:                      # FX study 1 (USD/JPY specialist). FROZEN at
   excluded_with_reason:
     intervention_trading_rule: "too few interventions observable in real time: the 1991-2001 record was disclosed only in 2001; after that, yen-buying operations occur only in 2022 (validation) -> a rule would rest on one episode; kept as a descriptive event study (open question), not a trial"
     price_trend_rules: "family already killed (Studies 1-3) and FX trend profits disappeared by the early 1990s (Neely, Weller & Ulrich 2009)"
+
+live_usdjpy:                        # FORWARD (shadow) test, monitoring side only. FROZEN 2026-10-29 (owner approved D1-D5)
+  preregistration: {document: research/USDJPY_FORWARD_TEST_PREREG.md, sha256: 763f8dc3218406dd4da18c0083ca00e4f7e3336b7d9e6e1ffcb3f37ebfc3c703, frozen_commit: 61a939b}
+  forward_trials: {F001: "RO-REV v0.2 deleveraging-overshoot reversal", F002: "TSM12 v0.2 12-month momentum (low-prior control)"}
+  forward_n: 2                      # separate from historical cumulative N = 142, which is unchanged
+  data_governance: "owner D1 2026-10-29: monitoring-side trailing windows of current Yahoo data may reach into 2024-2026 for computing live signals only. GUARD: no returns, performance or rule evaluation may be computed on 2024+ data outside the forward registry (live/usdjpy/registry.sqlite). Research datasets of the 2024+ holdout are never downloaded or opened."
+  instrument: {symbol: JPY=X, source: "Yahoo Finance via yfinance (indicative last price; not executable)", spy_symbol: SPY}
+  rules:
+    F001: {version: "0.2", trigger_z: -2.0, vol_window: 60, invalidation_mult: 1.0, target_mult: 0.5, expiry_fx_days: 2,
+           exclude: ["scheduled FOMC or BoJ policy decision on day t", "Japanese or US bank holiday on day t (conservative temporary guard)"],
+           mof_intervention: "flag and report separately; never delete"}
+    F002: {version: "0.2", lookback_months: 12, dead_band_log_return: 0.02, stop_monthly_sd_mult: 3.0, vol_window: 60}
+  sizing: {start_usd: 10000, risk_per_trade: 0.005, per_rule_max_x: 0.5, max_gross_x: 1.0}
+  costs:
+    base: {one_way: 0.00015, financing_admin_fee_annual: 0.0100}
+    stress: {one_way: 0.00030, financing_admin_fee_annual: 0.0150}
+    financing_rates: {usd: "FRED DTB3", jpy: "BoJ overnight call rate (BoJ Time-Series API or FRED mirror)", roll: "17:00 ET, triple on Wednesday"}
+  baselines:
+    historical_sample_mean: {window: "1991-01..2023-12", series: "Fed H.10 DEXJPUS month-end", mean_monthly_log_return: 0.000094, months: 396, t: 0.06, sign: 1}
+    simple_trend: {sma_days: 20}
+    placebo_F001: {per_signal: 10, seed: 20261029}
+  evaluation: {min_resolved_for_claims: 30, F001_formal_n: 69, F002_formal_months: 120, formal_deadline: "2036-10-31", futility_review: "every 12 months once n >= 30", holm_across_forward_n: true}
+  risk_limits:                      # owner-approved 2026-10-29 (starting point)
+    risk_per_trade: 0.005
+    max_gross_x: 1.0
+    daily_loss_stop_new_entries: -0.01
+    drawdown_halt_review: -0.03
+    drawdown_close_all_stop: -0.05
+    stale_data: "hard block: entry needs USD/JPY LIVE (<=180 s) and specialist status DATA OK"
+    event_blackout_minutes: {before: 60, after: 30}
