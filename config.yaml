@@ -328,3 +328,10 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
                credentials: "macOS Keychain items 'trading-research-pushover-token' and 'trading-research-pushover-user' (owner sets them; never in files, logs or git)"}
     ntfy: {server: "https://ntfy.sh", priority: {HIGH: 5, NORMAL: 3, LOW: 2},
            credentials: "macOS Keychain item 'trading-research-ntfy-topic' (a long random topic name; owner sets it)"}
+  paper:                            # internal simulator (master prompt step 7); conventions follow the frozen pre-registration
+    fill: "snapshot price x (1 + c) when buying USD (long entry, short exit); x (1 - c) when selling USD"
+    financing: "position legs only (cash earns nothing, matching the cash baseline): USD leg x r_usd x days/360, JPY leg x r_jpy x days/365, minus |USD exposure| x admin fee x days/365; at each 17:00 ET roll, 3 days on Wednesday"
+    reconciliation:
+      exact_tolerance_usd: 0.000001          # independent recomputation from append-only fills and accruals
+      v2_parity_tolerance_frac: 0.0002       # FIXED BEFORE ANY COMPARISON: |ledger P&L - fx_engine_v2 replay P&L| <= 0.02% of starting equity ($2 per $10,000); detects gross errors (sign, units, missing financing, double fills), not cent-level convention differences (fill-with-spread vs cost-in-USD; roll-day vs calendar-day accrual)
+      on_mismatch: "HALTED + HIGH alert; manual review"

@@ -21,6 +21,7 @@ from src import clock as K
 
 from . import gate as G
 from . import lifecycle as LC
+from . import paper as PP
 from . import rules as RL
 from . import watch as W
 
@@ -42,6 +43,7 @@ class ScanInputs:
     bars: dict                             # symbol -> pandas Series of daily closes (may include incomplete bars)
     events_store: dict                     # live/events/events.json content
     mode: str = "forward"                  # "forward" or "demo"
+    rates: dict = field(default_factory=dict)   # {"usd": (annual rate or None, info), "jpy": (...)} for financing
 
 
 def completed(series, kind, now):
@@ -115,13 +117,26 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                      "events_generated_utc": inp.events_store.get("generated_utc")}
         state_rec["inputs_sha256"] = digest(state_rec)
         registry.append("market_state", state_rec, now=now)
-        prior = G.current_state(registry)
         kill_on = G.kill_flag_path(base_dir).exists()
-        open_now = LC.open_setups(registry)
-        for rid, fn in RL.RULES.items():
+        slot_s = slot.strftime("%Y%m%dT%H%MZ")
+        sigs = {rid: fn(RL.RuleInputs(fx=fx if fx is not None else pd.Series(dtype=float), spy=spy if spy is not None else pd.Series(dtype=float),
+                                      live_price=uj.get("last"), events=events, holidays=hol), rules_cfg[rid])
+                for rid, fn in RL.RULES.items()}
+        S_mark = uj.get("last")
+        f2 = sigs["F002"]
+        new_f002_bar = f2.bar_date if f2.kind in ("CANDIDATE", "NO_TRADE") and f2.setup_id else None
+        ledger_risk = PP.manage(registry, cfg, now, S_mark, inp.rates, slot_s, new_f002_bar) if S_mark else {}
+        summary["paper"] = {r: v[0] for r, v in ledger_risk.items()}
+        for rid, (st_, info) in ledger_risk.items():
+            if st_ == "HALTED" and (G.current_state(registry, rid) or {}).get("state") != "HALTED":
+                registry.append("risk_state", {"state": "HALTED", "ledger": rid, "why": info["why"],
+                                               "ny_date": now.astimezone(NY).date().isoformat()}, now=now)
+                registry.append("notification", LC.alert("HIGH", "%s sub-ledger HALTED: %s" % (rid, "; ".join(info["why"])),
+                                                         **{"class": "RISK/SYSTEM ALERT", "event_time_et": LC.et(now),
+                                                            "why_sent": "pre-registered risk limit"}), now=now)
+        for rid in RL.RULES:
             p = rules_cfg[rid]
-            sig = fn(RL.RuleInputs(fx=fx if fx is not None else pd.Series(dtype=float), spy=spy if spy is not None else pd.Series(dtype=float),
-                                   live_price=uj.get("last"), events=events, holidays=hol), p)
+            sig = sigs[rid]
             ev = registry.append("evaluation", {"type": "rule_signal", **sig.as_dict(), "inputs_sha256": state_rec["inputs_sha256"]},
                                  idem_key="eval:%s:%s:%s" % (inp.mode, rid, sig.bar_date), now=now)
             summary["evaluations"].append((rid, sig.kind, ev["duplicate"]))
@@ -174,11 +189,27 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
             c = G.Candidate(rule_id=rid, version=sig["version"], instrument="USDJPY", direction=sig["direction"],
                             entry_ref=px or sig["entry_ref"], invalidation=sig["invalidation"], target=sig["target"],
                             setup_id=sid, mode="shadow")
-            book = G.Book(equity=cfg["sizing"]["start_usd"], peak_equity=cfg["sizing"]["start_usd"],
-                          day_start_equity=cfg["sizing"]["start_usd"], positions={})      # shadow ledgers: step 7
-            d = G.decide(c, view, book, cfg, prior_state=prior, kill_on=kill_on)
+            led = PP.state(registry, rid, cfg)
+            S_now = px or sig["entry_ref"]
+            book = G.Book(equity=PP.equity(led, S_now), peak_equity=led["peak_equity"], day_start_equity=led["day_start_equity"],
+                          positions={r: PP.exposure_x(PP.state(registry, r, cfg), S_now) for r in rules_cfg
+                                     if PP.state(registry, r, cfg)["position"]})
+            d = G.decide(c, view, book, cfg, prior_state=G.current_state(registry, rid), kill_on=kill_on)
+            if led["experiment_stopped"]:
+                d = G.Decision("BLOCKED", 0.0, ["OPERATIONAL %s experiment stopped (drawdown <= -5%%); owner decision needed" % rid], "HALTED")
+            oid = None
+            if d.status in ("APPROVED", "SHRUNK"):
+                f = dict(market="USDJPY", instrument="JPY=X", setup_id=sid, rule_version="%s v%s" % (rid, sig["version"]),
+                         reference_price=S_now, price_label="%s (indicative, not executable)" % uj.get("freshness", "UNKNOWN"),
+                         quote_time_et=LC.et(uj.get("source_ts_utc")), direction={1: "LONG USD/JPY", -1: "SHORT USD/JPY"}[sig["direction"]],
+                         invalidation=sig["invalidation"], target_or_exit="target %s; %s" % (sig["target"] or "none", sig["expiry_rule"]),
+                         estimated_costs="round trip %.3f%% of notional (base, unverified) + financing (estimated, unverified)" % (200 * cfg["costs"]["base"]["one_way"]),
+                         evidence_for=EVIDENCE[rid][0], evidence_against=EVIDENCE[rid][1], expiry=sig["expiry_rule"],
+                         validation_status="FORWARD TEST %s: EXPERIMENTAL, NOT VALIDATED%s" % (rid, " (DEMO RUN)" if inp.mode == "demo" else ""),
+                         why_sent="gate approved; fictional entry in the shadow ledger (internal simulator)", **{"class": "EXPERIMENTAL IDEA (shadow ledger)"})
+                oid = PP.enter(registry, cfg, rid, sid, sig, d.size_x, S_now, now, slot_s, f)
             registry.append("evaluation", {"type": "gate_decision", "setup_id": sid, **d.as_dict(),
-                                           "entry_status": "awaiting the paper order manager (step 7)" if d.status != "BLOCKED" else "not entered"},
+                                           "entry_status": ("entered: order %s" % oid) if oid else ("not entered" if d.status == "BLOCKED" else "not entered (position or order already exists)")},
                             idem_key="gate:%s:%s:%s" % (inp.mode, sid, key), now=now)
             summary["gate"].append((sid, d.status))
             if d.status == "BLOCKED" and st["state"] == "triggered":
@@ -187,7 +218,10 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                                "trigger": "; ".join(d.reasons)}, now)
                 summary["transitions"].append((sid, "blocked"))
         summary["watch"] = sum(1 for x in W.run(registry, now, watch_bars, inp.snapshot, inp.events_store, cfg["market_watch"]) if x)
+        if S_mark:
+            ok, _ = PP.reconcile(registry, cfg, now, S_mark)
+            summary["reconciled"] = ok
         registry.append("scan_run", {"mode": inp.mode, "slot_utc": slot.isoformat(), "completed_utc": now.astimezone(timezone.utc).isoformat(),
-                                     "summary": summary, "state": (prior or {}).get("state", "ACTIVE"), "kill_switch": kill_on},
+                                     "summary": summary, "state": (G.current_state(registry) or {}).get("state", "ACTIVE"), "kill_switch": kill_on},
                         idem_key=key, now=now)
     return summary

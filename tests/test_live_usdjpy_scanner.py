@@ -67,16 +67,18 @@ def test_A_and_C_calm_data_records_no_trade_with_inputs(reg, tmp_path):
 def test_trigger_creates_one_setup_and_one_complete_alert(reg, tmp_path):
     S.run_scan(reg, NOW, inputs(fx_shock=-0.02, spy_shock=-0.05), CFG, tmp_path)
     tr = kinds(reg, "setup_transition")
-    assert [(t["setup_id"], t["state"]) for t in tr] == [("F001-2026-11-09", "triggered")]
+    assert [(t["setup_id"], t["state"]) for t in tr] == [("F001-2026-11-09", "triggered"), ("F001-2026-11-09", "entered")]
     alerts = [n for n in kinds(reg, "notification") if n["fields"]["setup_id"] == "F001-2026-11-09"]
-    assert len(alerts) == 1 and alerts[0]["priority"] == "NORMAL"
+    assert [a["priority"] for a in alerts] == ["NORMAL", "NORMAL"]
     f = alerts[0]["fields"]
     assert set(f) == set(LC.ALERT_FIELDS)
     assert f["class"] == "EXPERIMENTAL IDEA (shadow ledger)" and "NOT VALIDATED" in f["validation_status"]
     assert f["reference_price"] == 150.0 and f["invalidation"] < 150.0
     assert f["target_or_exit"].startswith("target 15") and f["direction"] == "LONG USD/JPY"
     gate = [e for e in kinds(reg, "evaluation") if e["type"] == "gate_decision"]
-    assert gate and gate[0]["status"] in ("APPROVED", "SHRUNK") and "step 7" in gate[0]["entry_status"]
+    assert gate and gate[0]["status"] in ("APPROVED", "SHRUNK") and gate[0]["entry_status"].startswith("entered: order")
+    fill = [f for f in kinds(reg, "fill") if f["type"] == "trade"][0]
+    assert fill["price"] == pytest.approx(150.0 * 1.00015) and fill["notional_usd"] == pytest.approx(2500.0)
 
 
 def test_B_and_G_reruns_and_later_scans_do_not_duplicate_or_spam(reg, tmp_path):
@@ -86,8 +88,9 @@ def test_B_and_G_reruns_and_later_scans_do_not_duplicate_or_spam(reg, tmp_path):
     assert S.run_scan(reg, NOW, inp, CFG, tmp_path) == {"duplicate": True, "key": "scan:demo:20261110T2050Z"}
     assert reg.count() == n
     S.run_scan(reg, NOW + timedelta(minutes=30), inp, CFG, tmp_path)               # a later scan, same bar
-    assert len([t for t in kinds(reg, "setup_transition")]) == 1
-    assert len([x for x in kinds(reg, "notification") if x["fields"]["setup_id"] == "F001-2026-11-09"]) == 1
+    assert [t["state"] for t in kinds(reg, "setup_transition")] == ["triggered", "entered"]
+    assert len([x for x in kinds(reg, "notification") if x["fields"]["setup_id"] == "F001-2026-11-09"]) == 2
+    assert len([f for f in kinds(reg, "fill") if f["type"] == "trade"]) == 1                 # exactly one order filled
 
 
 def test_G_blocked_once_then_expired_without_spam(reg, tmp_path):

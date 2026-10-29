@@ -217,6 +217,7 @@ def resume(registry, base, confirm, now=None):
                                    "ny_date": now.astimezone(NY).date().isoformat()}, now=now)
 
 
-def current_state(registry):
-    recs = registry.records("risk_state")
+def current_state(registry, ledger=None):
+    """Latest trading state that applies: global records (no ledger) and, if given, this sub-ledger's own records."""
+    recs = [r for r in registry.records("risk_state") if r["payload"].get("ledger") in (None, ledger)]
     return recs[-1]["payload"] if recs else None
