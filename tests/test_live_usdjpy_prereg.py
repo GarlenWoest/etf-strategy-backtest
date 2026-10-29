@@ -31,3 +31,11 @@ def test_config_parameters_match_the_preregistration():
 def test_historical_n_is_unchanged():
     full = yaml.safe_load((PROJECT_ROOT / "config.yaml").read_text())
     assert full["usdjpy_study1"]["cumulative_trials_for_dsr"] == 142
+
+
+def test_v03_amendment_is_unchanged_and_sources_are_read_only():
+    a = CFG["amendments"]["v0.3"]
+    assert hashlib.sha256((PROJECT_ROOT / a["document"]).read_bytes()).hexdigest() == a["sha256"]
+    assert CFG["sources"]["oanda"]["host"] == "https://api-fxpractice.oanda.com"
+    assert CFG["sources"]["alpaca"]["host"] == "https://data.alpaca.markets"
+    assert CFG["late_detection_minutes"] == 30 and CFG["f002_first_month_end"] == "2026-10-30"
