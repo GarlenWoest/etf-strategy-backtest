@@ -143,3 +143,22 @@ def test_private_backup_rules_include_the_published_snapshot_and_exclude_live_da
     added = sorted(l.split("'")[1] for l in out.splitlines())
     assert added == ["live/usdjpy_backup/manifest.json", "live/usdjpy_backup/registry_export.jsonl",
                      "live/usdjpy_backup/registry_snapshot.sqlite"]
+
+
+def test_offsite_push_failures_alert_and_the_push_records_only_the_tool_result(env, monkeypatch):
+    root, reg = env
+    BK.record(reg, T0, BK.snapshot(reg, T0, CFG, root))
+    calls = []
+
+    class R:
+        returncode, stdout = 1, "BACKUP FAILED: git push: remote rejected\n"
+    monkeypatch.setattr(BK.subprocess, "run", lambda *a, **k: calls.append(k["env"]) or R())
+    for k in range(2):
+        t = T0 + timedelta(hours=k)
+        res = BK.offsite_push(root, t)
+        assert res == {"type": "offsite_push", "at_utc": t.isoformat(), "ok": False,
+                       "result": "BACKUP FAILED: git push: remote rejected"}
+        BK.record(reg, t, res)
+    assert set(calls[0]) == {"PATH", "HOME"}                       # no other environment (no secrets) passed on
+    probs = dict(BK.health(reg, T0 + timedelta(hours=2), CFG, root, offsite={"state": "OK", "age_days": 0.5}))
+    assert "push" in probs and len(_high(reg)) == 1

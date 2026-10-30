@@ -198,6 +198,9 @@ def health(registry, now, cfg, root, offsite=None):
     n = int(cfg["fail_alert_after"])
     if len(att) >= n and not any(a.get("ok") for a in att[-n:]):
         probs.append(("failing", "the last %d registry snapshot attempts failed (latest: %s)" % (n, att[-1].get("error", "?"))))
+    pushes = _attempts(registry, "offsite_push")
+    if len(pushes) >= n and not any(p_.get("ok") for p_ in pushes[-n:]):
+        probs.append(("push", "the last %d off-site pushes failed (latest: %s)" % (n, pushes[-1].get("result", "?"))))
     if oks:
         age = (now - datetime.fromisoformat(oks[-1]["at_utc"])).total_seconds() / 3600
         if age > cfg["max_age_hours"]:
@@ -282,3 +285,19 @@ def summary_line(registry, now, cfg, root, offsite=None):
     o = {"OK": "off-site copy pushed %s" % off.get("committed_et"), "NONE YET": "no off-site copy yet (next Sunday backup)"}.get(
         off.get("state"), "off-site status %s" % off.get("state"))
     return "Backup: %s; %s." % (local, o)
+
+
+def offsite_push(root, now):
+    """Run the existing private-backup tool (tools/backup_private.py run: allow-list check, commit, push, confirm that
+    GitHub's main equals the local head). Credentials stay in git's Keychain helper; only the tool's one-line result
+    (no secrets) is recorded."""
+    root = Path(root)
+    env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": os.environ.get("HOME", "")}
+    try:
+        r = subprocess.run([str(root / ".venv" / "bin" / "python"), "-I", str(root / "tools" / "backup_private.py"), "run"],
+                           capture_output=True, text=True, timeout=300, env=env, cwd=root)
+        line = (r.stdout.strip().splitlines() or [""])[-1][:300]
+        ok = r.returncode == 0 and line.startswith("BACKUP OK")
+    except Exception as ex:
+        ok, line = False, "%s: %s" % (type(ex).__name__, str(ex)[:200])
+    return {"type": "offsite_push", "at_utc": now.astimezone(timezone.utc).isoformat(), "ok": ok, "result": line}

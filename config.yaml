@@ -345,6 +345,8 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     fail_alert_after: 2                       # this many consecutive failed attempts -> HIGH alert
     offsite_max_age_days: 9                   # private-repo copy (pushed by the Sunday task) older than this -> HIGH alert
     offsite_required_from: "2026-10-30"       # the off-site check starts counting from this date
+    daily_offsite_push: true                  # owner decision 2026-10-30 (option c): after the verified evening snapshot, the runner
+                                              # runs the existing tools/backup_private.py (allow-list check, commit, push, confirm)
   paper:                            # internal simulator (master prompt step 7); conventions follow the frozen pre-registration
     fill: "snapshot price x (1 + c) when buying USD (long entry, short exit); x (1 - c) when selling USD"
     financing: "position legs only (cash earns nothing, matching the cash baseline): USD leg x r_usd x days/360, JPY leg x r_jpy x days/365, minus |USD exposure| x admin fee x days/365; at each 17:00 ET roll, 3 days on Wednesday"

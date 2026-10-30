@@ -12,7 +12,7 @@
   score                       score closed paper positions (once each) and write the status page
                               live/usdjpy/STATUS.md (STATUS_DEMO.md with --demo)
   verify                      check the registry hash chain
-  backup snapshot|restore-test [--source published|local-git|offsite]|status
+  backup snapshot|push|restore-test [--source published|local-git|offsite]|status
                               forward-registry snapshot (SQLite backup API, verified), restore test into tmp/, status
   status                      one-line state summary
 
@@ -168,6 +168,10 @@ def run(demo=False):
                 res = BK.snapshot(reg, now, bcfg, ROOT)
                 BK.record(reg, now, res)
                 done.append("backup %s" % ("OK (%s records)" % res["records"] if res["ok"] else "FAILED: %s" % res.get("error")))
+                if res["ok"] and bcfg.get("daily_offsite_push"):        # owner decision 2026-10-30 (option c)
+                    push = BK.offsite_push(ROOT, now)
+                    BK.record(reg, now, push)
+                    done.append("off-site push %s" % ("OK" if push["ok"] else "FAILED: %s" % push.get("result")))
             if BK.health(reg, now, bcfg, ROOT):
                 done.append("backup health problem alerted")
         ncfg = CFG["notifications"]
@@ -296,6 +300,13 @@ def main(a):
                 BK.record(reg, now, res)
             print("BACKUP SNAPSHOT %s: %s" % ("OK" if res["ok"] else "FAILED", json.dumps(
                 {k: res.get(k) for k in ("records", "integrity", "chain", "sha256", "published", "error")})))
+        elif sub == "push":                           # manual off-site push (same as the runner's daily push), under the lock
+            import fcntl
+            with open(LOCK, "w") as lk:
+                fcntl.flock(lk, fcntl.LOCK_EX)
+                res = BK.offsite_push(ROOT, now)
+                BK.record(reg, now, res)
+            print("OFF-SITE PUSH %s: %s" % ("OK" if res["ok"] else "FAILED", res["result"]))
         elif sub == "restore-test":
             src = a[a.index("--source") + 1] if "--source" in a else "published"
             res = BK.restore_test(ROOT, bcfg, reg, source=src)
