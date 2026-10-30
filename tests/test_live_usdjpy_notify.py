@@ -190,3 +190,14 @@ def test_pushover_and_ntfy_adapters_map_status_codes_and_never_record_secrets(re
     assert seen[-1][0] == "https://ntfy.sh/SECRET-trading-research-ntfy-topic"
     dump = str([r for r in reg.records()])
     assert "SECRET-" not in dump                                     # credentials never reach any record
+
+
+def test_digest_queued_late_then_delivered_does_not_raise_a_false_missing_alert(reg):
+    """Regression 2026-10-29 20:07 ET: the first run queued the digest after 20:00 ET and the liveness check ran
+    before dispatch, raising a false HIGH 'DAILY DIGEST MISSING'. Correct order: queue, deliver, then check."""
+    late = datetime(2026, 10, 30, 0, 7, tzinfo=timezone.utc)                # Thu 20:07 ET, after 18:00 + 120 min
+    reg.append("scan_run", {"completed_utc": late.isoformat(), "mode": "forward"})
+    assert N.queue_digest(reg, late, CFG) is True
+    N.dispatch(reg, late, [Fake("pushover")], CFG)
+    assert N.check_liveness(reg, late, CFG, fx_open=True) == []
+    assert not [r for r in reg.records("notification") if r["payload"]["priority"] == "HIGH"]

@@ -162,8 +162,9 @@ def run(demo=False):
         ncfg = CFG["notifications"]
         snap_for_digest = st.get("last_snapshot") or {}
         N.queue_digest(reg, now, ncfg, snap_for_digest)
-        N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now))
-        sent = N.dispatch(reg, now, channels, ncfg)
+        sent = N.dispatch(reg, now, channels, ncfg)                 # deliver first: a digest queued this run counts
+        if N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now)):
+            sent += N.dispatch(reg, now, channels, ncfg)           # deliver any liveness alert raised just now
         done.append("notify %d action(s)" % len(sent))
         st["last_run_utc"] = now.isoformat()
         save_state(st, demo)
@@ -234,9 +235,11 @@ def main(a):
             snap_p = ROOT / "live" / "intel" / "latest.json"
             snap = json.loads(snap_p.read_text()) if snap_p.exists() else {}
             N.queue_digest(reg, now, ncfg, snap)
-            N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now))
             channels = [local] if "--local-only" in a else [named[ncfg["primary"]], named[ncfg["fallback"]]]
-        for nid, outcome in N.dispatch(reg, now, channels, ncfg):
+        out = N.dispatch(reg, now, channels, ncfg)
+        if cmd == "notify" and N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now)):
+            out += N.dispatch(reg, now, channels, ncfg)
+        for nid, outcome in out:
             print("NOTIFY %s: %s" % (nid, outcome))
         reg.close()
     elif cmd == "score":
