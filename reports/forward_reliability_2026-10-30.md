@@ -57,4 +57,10 @@ _One report for this phase, updated phase by phase. Monitoring side only: no fro
 
 ### Results
 
-_(filled in below after the first live snapshot and restore test)_
+- **First live snapshot:** taken by the scheduled 09:47 ET run (`backup OK (100 records)`). A second one, taken with `backup snapshot` at 09:47:50 ET after a fix (below), has 102 records and passes integrity and chain checks (SHA-256 `a09c52f5…`).
+- **Restore tests (published copy):** PASS both times. Every restored record equals the live registry's record with the same seq; the temporary folder under `tmp/` was removed.
+- **Private-backup dry run** (`git add -n` with the unchanged pathspecs, nothing staged): only `live/usdjpy_backup/manifest.json`, `registry_export.jsonl` and `registry_snapshot.sqlite` would be added; no live database, WAL file or local copy.
+- **Defect found and fixed during the test:** the first snapshot kept SQLite's WAL journal mode, so opening it left `-wal`/`-shm` side files. Snapshots are now converted to a single self-contained file (journal mode DELETE) before verification; a test pins it.
+- **Runner after the change:** the 10:02 ET scheduled scan completed cleanly (RUN OK, reconciled, empty error log; chain intact, 109 records).
+- **Tests:** 323 pass (+10: snapshot with un-checkpointed WAL writes, tamper detection, restore pass and manifest mismatch, due timing and retry, health alerts and their daily deduplication, stale off-site copy, off-site grace, the private-backup path rules).
+- **Not yet verified:** a restore from the private repository itself (off-site). The first off-site copy is created by the Sunday 11-01 backup run; then `backup restore-test --source offsite` checks it.
