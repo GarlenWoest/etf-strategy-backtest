@@ -21,6 +21,11 @@ REAL = PROJECT_ROOT / "paper"
 FRAME = REAL / "replay" / "prices_as_used_2026-10-29.pkl"
 OUT = PROJECT_ROOT / "tmp" / "test_paper_replay"
 DAYS = [date(2026, 10, 26), date(2026, 10, 27), date(2026, 10, 28), date(2026, 10, 29)]
+# Book A's targets as in force for these days (September month-end), from live/state.json in the private backup
+# (commit 8d11673, 2026-10-28). Regression 2026-10-30: the test read the LIVE file, which the scheduled run updates at
+# each month-end (10-30: October targets), so the replay silently used later targets.
+TARGETS_USED = ("2026-09-30", {"V122": {"VTI": 0.25, "IEF": 0.0, "DBC": 0.25, "GLD": 0.0},
+                               "V074": {"UGL": 0.0, "UPRO": 0.25, "TQQQ": 0.25, "TMF": 0.0}})
 pytestmark = pytest.mark.skipif(not FRAME.exists(), reason="private paper data not present")
 
 
@@ -28,6 +33,7 @@ def test_current_code_reproduces_the_stored_books():
     spec = importlib.util.spec_from_file_location("pbr", PROJECT_ROOT / "tools" / "paper_books.py")
     PB = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(PB)
+    PB.live_targets = lambda: TARGETS_USED                         # never the mutable live file
     frame = pd.read_pickle(FRAME)
     shutil.rmtree(OUT, ignore_errors=True)
     p = PB.Paper(OUT)
