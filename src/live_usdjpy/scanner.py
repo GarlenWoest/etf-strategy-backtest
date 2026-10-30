@@ -106,6 +106,30 @@ def digest(obj):
     return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode()).hexdigest()
 
 
+INSTRUMENT_LABEL = "USD_JPY (OANDA practice, indicative)"
+BAR_SOURCES = {"USD_JPY": "OANDA practice daily mid candles (17:00 New York, complete only)",
+               "GBP_USD": "OANDA practice daily mid candles (17:00 New York, complete only)",
+               "SPY": "Alpaca IEX daily bars (raw)", "GLD": "Alpaca IEX daily bars (raw)"}
+SPREAD_NOTE = ("Observed bid/ask spreads are recorded descriptively only (v0.3 amendment, section 1). The frozen cost "
+               "model (0.015% one-way base, 0.030% stress) is unchanged and observed spreads are never substituted.")
+QUOTE_KEYS = ("source", "symbol", "bid", "ask", "spread", "spread_pips", "source_ts_utc", "retrieved_utc", "request_utc",
+              "age_s", "freshness", "freshness_note", "clock_note", "server_clock_offset_s", "quote_problems", "tradeable",
+              "quote_bid", "quote_ask", "quote_ts_utc")
+
+
+def _bars(bars, key, legacy):
+    """Bars by the v0.3 source symbol; the Yahoo-era key is still accepted from older callers and fixtures."""
+    return bars.get(key) if bars.get(key) is not None else bars.get(legacy)
+
+
+def quote_record(o):
+    """The observed quote as stored in market_state: quote time, retrieval time, source, bid, ask, spread, freshness
+    and every missing or invalid field named explicitly."""
+    q = {k: o.get(k) for k in QUOTE_KEYS if k in o}
+    q["missing"] = [k for k in ("bid", "ask", "source_ts_utc", "retrieved_utc") if o.get(k) is None]
+    return q
+
+
 def run_scan(registry, now, inp, cfg, base_dir, slot=None):
     slot = slot or now.astimezone(timezone.utc).replace(minute=now.minute - now.minute % 5, second=0, microsecond=0)
     key = "scan:%s:%s" % (inp.mode, slot.strftime("%Y%m%dT%H%MZ"))
@@ -124,10 +148,10 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
     obs = {o["specialist"]: o for o in inp.snapshot.get("observations", []) if o.get("role") == "primary"}
     uj = obs.get("usdjpy", {})
     fxk = "complete" if inp.fx_prefiltered else "fx"
-    fx = completed(inp.bars.get("JPY=X"), fxk, now)
+    fx = completed(_bars(inp.bars, "USD_JPY", "JPY=X"), fxk, now)
     spy = completed(inp.bars.get("SPY"), "nyse", now)
     watch_bars = {"USDJPY": fx, "GOLD": completed(inp.bars.get("GLD"), "nyse", now),
-                  "GBPUSD": completed(inp.bars.get("GBPUSD=X"), fxk, now)}
+                  "GBPUSD": completed(_bars(inp.bars, "GBP_USD", "GBPUSD=X"), fxk, now)}
     events = list((inp.events_store.get("events") or {}).values())
     hol = holidays_for({now.year - 1, now.year})
     view = G.MarketView(now=now, price_freshness=uj.get("freshness", "UNAVAILABLE"), price_age_s=uj.get("age_s") or -1,
@@ -136,11 +160,14 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
     summary = {"mode": inp.mode, "evaluations": [], "transitions": [], "gate": [], "watch": 0}
     with registry.transaction():
         state_rec = {"label": "DEMO" if inp.mode == "demo" else "FORWARD", "snapshot_generated_utc": inp.snapshot.get("generated_utc"),
-                     "usdjpy": {k: uj.get(k) for k in ("last", "source_ts_utc", "freshness", "age_s", "session_open")},
+                     "usdjpy": {k: uj.get(k) for k in ("last", "source_ts_utc", "retrieved_utc", "freshness", "age_s", "session_open")},
                      "status": inp.snapshot.get("status"),
                      "bars": {s: {"last_date": (b.index[-1].date().isoformat() if b is not None and len(b) else None),
                                   "last_close": (float(b.iloc[-1]) if b is not None and len(b) else None), "n": (len(b) if b is not None else 0)}
-                              for s, b in (("JPY=X", fx), ("SPY", spy), ("GLD", watch_bars["GOLD"]), ("GBPUSD=X", watch_bars["GBPUSD"]))},
+                              for s, b in (("USD_JPY", fx), ("SPY", spy), ("GLD", watch_bars["GOLD"]), ("GBP_USD", watch_bars["GBPUSD"]))},
+                     "bar_sources": BAR_SOURCES,
+                     "quotes": {spec: quote_record(o) for spec, o in obs.items()},
+                     "spread_note": SPREAD_NOTE,
                      "events_generated_utc": inp.events_store.get("generated_utc"),
                      "usdjpy_sma20": (float(fx.iloc[-20:].mean()) if fx is not None and len(fx) >= 20 else None),
                      "usdjpy_sessions": (inp.snapshot.get("clock") or {}).get("active_sessions")}
@@ -174,7 +201,7 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                                                 "detected_late": late, "detected_utc": now.astimezone(timezone.utc).isoformat()},
                                  idem_key="eval:%s:%s:%s" % (inp.mode, rid, sig.bar_date), now=now)
             summary["evaluations"].append((rid, sig.kind, ev["duplicate"]))
-            fields = dict(market="USDJPY", instrument="JPY=X", setup_id=sig.setup_id, rule_version="%s v%s" % (rid, sig.version),
+            fields = dict(market="USDJPY", instrument=INSTRUMENT_LABEL, setup_id=sig.setup_id, rule_version="%s v%s" % (rid, sig.version),
                           event_time_et="bar %s" % sig.bar_date, quote_time_et=LC.et(uj.get("source_ts_utc")),
                           reference_price=sig.entry_ref, price_label="%s (indicative, not executable)" % uj.get("freshness", "UNKNOWN"),
                           session=", ".join((inp.snapshot.get("clock") or {}).get("active_sessions", []) or []) or "none open",
@@ -234,7 +261,7 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                 d = G.Decision("BLOCKED", 0.0, ["OPERATIONAL %s experiment stopped (drawdown <= -5%%); owner decision needed" % rid], "HALTED")
             oid = None
             if d.status in ("APPROVED", "SHRUNK"):
-                f = dict(market="USDJPY", instrument="JPY=X", setup_id=sid, rule_version="%s v%s" % (rid, sig["version"]),
+                f = dict(market="USDJPY", instrument=INSTRUMENT_LABEL, setup_id=sid, rule_version="%s v%s" % (rid, sig["version"]),
                          reference_price=S_now, price_label="%s (indicative, not executable)" % uj.get("freshness", "UNKNOWN"),
                          quote_time_et=LC.et(uj.get("source_ts_utc")), direction={1: "LONG USD/JPY", -1: "SHORT USD/JPY"}[sig["direction"]],
                          invalidation=sig["invalidation"], target_or_exit="target %s; %s" % (sig["target"] or "none", sig["expiry_rule"]),

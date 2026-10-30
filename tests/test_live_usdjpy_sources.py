@@ -96,3 +96,46 @@ def test_source_errors_report_status_only():
     with pytest.raises(SR.SourceError) as e:
         SR._get(SR.ALPACA_HOST, "/v2/stocks/bars", {}, {"APCA-API-SECRET-KEY": "SECRET"}, lambda *a, **k: Resp({}, 403))
     assert "403" in str(e.value) and "SECRET" not in str(e.value)
+
+
+def test_quote_fields_name_missing_crossed_and_locked_quotes():
+    assert SR.quote_fields(150.0, 150.016, 0.01)["spread_pips"] == pytest.approx(1.6)
+    assert SR.quote_fields(None, 150.0, 0.01)["quote_problems"] == ["bid"]
+    assert SR.quote_fields(150.02, 150.0, 0.01)["quote_problems"] == ["crossed quote (bid > ask)"]
+    q = SR.quote_fields(150.0, 150.0, 0.01)
+    assert q["quote_problems"] == ["locked quote (bid = ask)"] and q["mid"] is None
+
+
+def test_age_is_measured_from_retrieval_not_from_the_start_of_the_run():
+    """Regression 2026-10-30: ages were measured from the run's start time (taken before the event poll and the price
+    request), so every quote looked younger than zero (-0.7 to -4.8 s, -34 s after a 30 s event poll)."""
+    from datetime import timedelta
+    run_start = datetime(2026, 11, 2, 14, 0, 0, tzinfo=timezone.utc)
+    quote = run_start + timedelta(seconds=33)
+    meta = {"request_utc": run_start + timedelta(seconds=32.5), "retrieved_utc": run_start + timedelta(seconds=34),
+            "server_date": "Mon, 02 Nov 2026 14:00:33 GMT"}
+    t = SR.timing(quote, meta)
+    assert t["age_s"] == pytest.approx(1.0) and t["clock_note"] is None
+    assert t["server_clock_offset_s"] == pytest.approx(-0.2, abs=0.01)
+    skewed = SR.timing(quote + timedelta(seconds=5), meta)
+    assert skewed["age_s"] == pytest.approx(-4.0) and skewed["clock_note"].startswith("CLOCK SKEW")
+
+
+def test_snapshot_marks_an_invalid_quote_unavailable_and_keeps_its_fields():
+    now = datetime(2026, 11, 2, 14, 0, tzinfo=timezone.utc)
+    crossed = {"USD_JPY": dict(SR.quote_fields(150.02, 150.0, 0.01), time_utc=now, tradeable=True, request_utc=now, retrieved_utc=now),
+               "GBP_USD": dict(SR.quote_fields(1.30, 1.3002, 0.0001), time_utc=now, tradeable=True, request_utc=now, retrieved_utc=now)}
+
+    class O:
+        def pricing(self):
+            return crossed
+
+    class A:
+        def latest_quotes(self, s):
+            raise SR.SourceError("Alpaca returned HTTP 503")
+    snap = SR.snapshot(now, oanda=O(), alpaca=A())
+    uj = [o for o in snap["observations"] if o["specialist"] == "usdjpy"][0]
+    assert uj["freshness"] == "UNAVAILABLE" and uj["last"] is None and "crossed" in uj["freshness_note"]
+    assert uj["bid"] == 150.02 and uj["ask"] == 150.0 and uj["retrieved_utc"] == now.isoformat()
+    gb = [o for o in snap["observations"] if o["specialist"] == "gbpusd"][0]
+    assert gb["freshness"] == "LIVE" and gb["spread_pips"] == pytest.approx(2.0)

@@ -318,7 +318,7 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     regime_ratio_down: 1.0
     regime_lookback: 250
     event_horizon_hours: 24         # W003
-    markets: {USDJPY: "JPY=X", GOLD: "GLD", GBPUSD: "GBPUSD=X"}
+    markets: {USDJPY: "USD_JPY (OANDA practice)", GOLD: "GLD (Alpaca IEX)", GBPUSD: "GBP_USD (OANDA practice)"}   # labels; Yahoo symbols until 2026-10-30
   entry_window_fx_days: {F001: 1, F002: 3}     # scans after detection during which a gate-blocked setup may still enter
   demo_registry: live/usdjpy/demo_registry.sqlite
   registry: live/usdjpy/registry.sqlite

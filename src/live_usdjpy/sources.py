@@ -44,16 +44,21 @@ class SourceError(RuntimeError):
     pass
 
 
-def _get(host, path, params, headers, http_get=None):
-    """The ONLY way this module touches the network: GET to an allow-listed path on a hard-wired host."""
+def _get(host, path, params, headers, http_get=None, meta=None):
+    """The ONLY way this module touches the network: GET to an allow-listed path on a hard-wired host.
+    `meta` (optional dict) receives request_utc, retrieved_utc and the server's HTTP Date header (for clock checks)."""
     if host not in ALLOWED or not any(re.match(p, path) for p in ALLOWED[host]):
         raise OrderEndpointBlocked("blocked: %s%s is not an allow-listed read-only endpoint" % (host, path))
     import requests
     get = http_get or requests.get
+    t0 = datetime.now(timezone.utc)
     try:
         r = get(host + path + ("?" + urlencode(params) if params else ""), headers=headers, timeout=20)
     except Exception as ex:
         raise SourceError("%s request failed: %s" % (host, type(ex).__name__)) from None
+    if meta is not None:
+        meta.update(request_utc=t0, retrieved_utc=datetime.now(timezone.utc),
+                    server_date=(getattr(r, "headers", None) or {}).get("Date"))
     if r.status_code != 200:
         raise SourceError("%s returned HTTP %d" % (host, r.status_code))
     return r.json()
@@ -77,13 +82,14 @@ class Oanda:
         acct = secret("trading-research-oanda-account")
         if not acct:
             raise SourceError("OANDA practice account id not configured")
-        j = _get(OANDA_HOST, "/v3/accounts/%s/pricing" % acct, {"instruments": ",".join(instruments)}, self._h(), self.http_get)
+        meta = {}
+        j = _get(OANDA_HOST, "/v3/accounts/%s/pricing" % acct, {"instruments": ",".join(instruments)}, self._h(),
+                 self.http_get, meta=meta)
         out = {}
         for p in j.get("prices", []):
-            bid, ask = float(p["bids"][0]["price"]), float(p["asks"][0]["price"])
-            out[p["instrument"]] = {"bid": bid, "ask": ask, "mid": (bid + ask) / 2, "spread": ask - bid,
-                                    "spread_pips": (ask - bid) / PIP.get(p["instrument"], 1), "time_utc": _ts(p["time"]),
-                                    "tradeable": p.get("tradeable")}
+            q = quote_fields(_px(p.get("bids")), _px(p.get("asks")), PIP.get(p["instrument"], 1))
+            q.update(time_utc=_ts(p["time"]) if p.get("time") else None, tradeable=p.get("tradeable"), **meta)
+            out[p["instrument"]] = q
         return out
 
     def daily(self, instrument, count=400):
@@ -112,12 +118,14 @@ class Alpaca:
         return {"APCA-API-KEY-ID": k, "APCA-API-SECRET-KEY": s}
 
     def latest_quotes(self, symbols=("SPY", "GLD")):
-        j = _get(ALPACA_HOST, "/v2/stocks/quotes/latest", {"symbols": ",".join(symbols), "feed": "iex"}, self._h(), self.http_get)
+        meta = {}
+        j = _get(ALPACA_HOST, "/v2/stocks/quotes/latest", {"symbols": ",".join(symbols), "feed": "iex"}, self._h(),
+                 self.http_get, meta=meta)
         out = {}
         for s, q in (j.get("quotes") or {}).items():
-            bid, ask = float(q.get("bp") or 0), float(q.get("ap") or 0)
-            out[s] = {"bid": bid, "ask": ask, "mid": (bid + ask) / 2 if bid and ask else None,
-                      "spread": (ask - bid) if bid and ask else None, "time_utc": _ts(q["t"]), "feed": "iex"}
+            f = quote_fields(float(q.get("bp") or 0) or None, float(q.get("ap") or 0) or None, None)
+            f.update(time_utc=_ts(q["t"]) if q.get("t") else None, feed="iex", **meta)
+            out[s] = f
         return out
 
     def daily(self, symbols=("SPY", "GLD"), days=620, now=None):
@@ -134,6 +142,50 @@ class Alpaca:
                 break
             params = dict(params, page_token=j["next_page_token"])
         return {s: pd.Series(v).sort_index() for s, v in out.items()}
+
+
+def _px(levels):
+    try:
+        return float(levels[0]["price"])
+    except (TypeError, IndexError, KeyError, ValueError):
+        return None
+
+
+def quote_fields(bid, ask, pip):
+    """bid/ask/mid/spread with explicit problems: missing sides, non-positive prices, crossed or locked quotes."""
+    problems = [n for n, v in (("bid", bid), ("ask", ask)) if v is None]
+    problems += ["%s not positive" % n for n, v in (("bid", bid), ("ask", ask)) if v is not None and v <= 0]
+    ok = not problems
+    if ok and bid > ask:
+        problems.append("crossed quote (bid > ask)")
+    elif ok and bid == ask:
+        problems.append("locked quote (bid = ask)")
+    valid = ok and bid < ask
+    return {"bid": bid, "ask": ask, "mid": (bid + ask) / 2 if valid else None, "spread": round(ask - bid, 8) if valid else None,
+            "spread_pips": round((ask - bid) / pip, 3) if valid and pip else None, "quote_problems": problems}
+
+
+def timing(quote_utc, meta, skew_tolerance_s=2.0):
+    """Quote age measured from the moment the response arrived (not from the start of the run), plus clock checks:
+    a quote stamped later than its own retrieval means the local clock is behind the venue's by at least that much."""
+    ret = meta.get("retrieved_utc")
+    out = {"quote_ts_utc": quote_utc.isoformat() if quote_utc else None,
+           "request_utc": meta["request_utc"].isoformat() if meta.get("request_utc") else None,
+           "retrieved_utc": ret.isoformat() if ret else None, "age_s": None, "clock_note": None}
+    if quote_utc and ret:
+        age = (ret - quote_utc).total_seconds()
+        out["age_s"] = round(age, 3)
+        if age < -skew_tolerance_s:
+            out["clock_note"] = "CLOCK SKEW: quote stamped %.1f s after it was received (local clock behind)" % -age
+    sd = meta.get("server_date")
+    if sd and ret:
+        try:
+            from email.utils import parsedate_to_datetime
+            off = (parsedate_to_datetime(sd) - (meta["request_utc"] + (ret - meta["request_utc"]) / 2)).total_seconds()
+            out["server_clock_offset_s"] = round(off, 1)            # HTTP Date has 1 s resolution: +/-1 s is noise
+        except Exception:
+            out["server_clock_offset_s"] = None
+    return out
 
 
 def _ts(s):
@@ -164,10 +216,17 @@ def snapshot(now, oanda=None, alpaca=None, fx_bars=None, gld_bars=None, cfg_inte
         o = {"specialist": spec, "role": "primary", "source": "OANDA v20 practice (pricing endpoint; indicative practice quote)",
              "symbol": inst, "quote_type": "practice bid/ask mid; not an executed fill"}
         if p:
-            fr, _, note = MI.freshness_intraday(p["time_utc"], now, fr_fx, "fx")
-            o.update(last=p["mid"], bid=p["bid"], ask=p["ask"], spread_pips=p["spread_pips"], source_ts_utc=p["time_utc"].isoformat(),
-                     age_s=(now - p["time_utc"]).total_seconds(), freshness=fr, freshness_note=note, session="fx",
-                     session_open=K.fx_market_open(now))
+            tm = timing(p.get("time_utc"), p)
+            o.update(bid=p["bid"], ask=p["ask"], spread=p["spread"], spread_pips=p["spread_pips"], quote_problems=p["quote_problems"],
+                     tradeable=p.get("tradeable"), source_ts_utc=tm["quote_ts_utc"], retrieved_utc=tm["retrieved_utc"],
+                     request_utc=tm["request_utc"], age_s=tm["age_s"], clock_note=tm["clock_note"],
+                     server_clock_offset_s=tm.get("server_clock_offset_s"), session="fx", session_open=K.fx_market_open(now))
+            if p["quote_problems"] or not p.get("time_utc"):
+                o.update(last=None, freshness="UNAVAILABLE", freshness_note="invalid quote: %s" % (
+                    ", ".join(p["quote_problems"]) or "no quote time"))
+            else:
+                fr, _, note = MI.freshness_intraday(p["time_utc"], p["retrieved_utc"], fr_fx, "fx")
+                o.update(last=p["mid"], freshness=fr, freshness_note=note)
         else:
             o.update(last=None, freshness="UNAVAILABLE", error=err, session="fx", session_open=K.fx_market_open(now), age_s=None)
         bars = (fx_bars or {}).get(inst)
@@ -183,10 +242,14 @@ def snapshot(now, oanda=None, alpaca=None, fx_bars=None, gld_bars=None, cfg_inte
     g = {"specialist": "gold", "role": "primary", "source": "Alpaca market data (IEX feed)", "symbol": "GLD",
          "quote_type": "IEX quote mid; GLD trades 09:30-16:00 ET; not spot gold", "session": "nyse",
          "session_open": MI.nyse_open(now)}
+    if q:
+        tm = timing(q.get("time_utc"), q)
+        g.update(quote_bid=q["bid"], quote_ask=q["ask"], quote_problems=q["quote_problems"], quote_ts_utc=tm["quote_ts_utc"],
+                 retrieved_utc=tm["retrieved_utc"], clock_note=tm["clock_note"])
     if q and q.get("mid") and MI.nyse_open(now):
-        fr, _, note = MI.freshness_intraday(q["time_utc"], now, fr_ex, "nyse")
-        g.update(last=q["mid"], bid=q["bid"], ask=q["ask"], source_ts_utc=q["time_utc"].isoformat(),
-                 age_s=(now - q["time_utc"]).total_seconds(), freshness=fr, freshness_note=note)
+        fr, _, note = MI.freshness_intraday(q["time_utc"], q["retrieved_utc"], fr_ex, "nyse")
+        g.update(last=q["mid"], bid=q["bid"], ask=q["ask"], spread=q["spread"], source_ts_utc=tm["quote_ts_utc"],
+                 age_s=tm["age_s"], freshness=fr, freshness_note=note)
     elif gld_bars is not None and len(gld_bars) and not MI.nyse_open(now):
         # closed market (or a one-sided after-hours IEX quote): the last completed IEX daily close, labelled as such
         d = gld_bars.index[-1].date()

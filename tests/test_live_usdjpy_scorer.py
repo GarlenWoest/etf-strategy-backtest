@@ -62,7 +62,7 @@ def test_status_page_has_all_sections_and_labels(reg, tmp_path):
     SC.score_closed(reg, CFG, MON + timedelta(hours=1))
     page = SC.status_page(reg, CFG, MON + timedelta(hours=1), {"observations": [], "status": {}}, tmp_path)
     for s in ("## System", "## Markets", "## Open paper positions", "## Opportunity history", "## Scorecard",
-              "EXPERIMENTAL SHADOW SYSTEM", "Fewer than 30 resolved signals", "not scheduled yet", "Gold (GLD reference)",
+              "EXPERIMENTAL SHADOW SYSTEM", "Fewer than 30 resolved signals", "LaunchAgent at :02", "Gold (GLD reference)",
               "observation alerts only", "GBP/USD", "monitoring only", "F001-2026-11-06"):
         assert s in page, s
 

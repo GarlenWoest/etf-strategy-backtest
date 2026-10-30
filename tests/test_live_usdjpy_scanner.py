@@ -61,7 +61,9 @@ def test_A_and_C_calm_data_records_no_trade_with_inputs(reg, tmp_path):
     assert {e["rule_id"] for e in ev} == {"F001", "F002"}
     f1 = next(e for e in ev if e["rule_id"] == "F001")
     assert f1["kind"] == "NO_TRADE" and f1["inputs_sha256"] and "z_usdjpy" in f1["values"]
-    assert kinds(reg, "market_state")[0]["bars"]["JPY=X"]["last_date"] == "2026-11-09"
+    ms = kinds(reg, "market_state")[0]
+    assert ms["bars"]["USD_JPY"]["last_date"] == "2026-11-09"     # v0.3 symbols (not JPY=X)
+    assert "usdjpy" in ms["quotes"] and "never substituted" in ms["spread_note"]
     assert reg.verify() is None
 
 
@@ -191,7 +193,7 @@ def test_watch_alerts_mark_non_applicable_fields(reg):
     W.run(reg, NOW, {}, snap(), {"events": ev}, CFG["market_watch"])
     f = [n for n in kinds(reg, "notification") if "Consumer Price Index" in n["title"]][0]["fields"]
     assert "size" not in f and "max_planned_loss" not in f and "invalidation" not in f     # not applicable: omitted
-    assert f["instrument"].startswith("JPY=X") and "UNKNOWN" not in f.values()
+    assert f["instrument"].startswith("USD_JPY (OANDA") and "UNKNOWN" not in f.values()
 
 
 

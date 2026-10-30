@@ -22,7 +22,8 @@ VERSION = "1.0"
 HIGH_IMPACT = ("FOMC", "Employment Situation", "Consumer Price Index", "GDP", "Personal Income", "BoJ Monetary Policy",
                "UK Labour Market", "Consumer price inflation", "GDP monthly estimate")
 EVENT_MARKETS = {"usdjpy": "USDJPY", "gold": "GOLD", "gbpusd": "GBPUSD"}
-INSTRUMENT = {"USDJPY": "JPY=X (indicative)", "GOLD": "GLD (gold reference; not spot gold)", "GBPUSD": "GBPUSD=X (indicative)"}
+INSTRUMENT = {"USDJPY": "USD_JPY (OANDA practice, indicative)", "GOLD": "GLD (Alpaca IEX; gold reference, not spot gold)",
+              "GBPUSD": "GBP_USD (OANDA practice, indicative)"}
 NA = "not applicable (information only)"
 NOT_TRADE = dict(setup_id=NA, rule_version="MARKET WATCH v%s" % VERSION, direction=NA, invalidation=NA, target_or_exit=NA,
                  size=NA, max_planned_loss=NA, estimated_costs=NA, evidence_for=NA, evidence_against=NA, expiry=NA)

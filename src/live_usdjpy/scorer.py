@@ -56,7 +56,8 @@ def daily_closes(registry):
     """Daily USD/JPY closes as recorded by the scanner (one per completed bar date), from market_state records."""
     out = {}
     for r in registry.records("market_state"):
-        b = (r["payload"].get("bars") or {}).get("JPY=X") or {}
+        bars_ = r["payload"].get("bars") or {}
+        b = bars_.get("USD_JPY") or bars_.get("JPY=X") or {}        # Yahoo-era key in records before 2026-10-30
         if b.get("last_date") and b.get("last_close"):
             out[b["last_date"]] = b["last_close"]
     return dict(sorted(out.items()))
@@ -199,7 +200,7 @@ def status_page(registry, cfg, now, snapshot=None, base_dir=None, mode="forward"
          "| Kill switch | %s |" % ("ON" if kill else "off"),
          "| Last scan | %s |" % (LC.et(last["completed_utc"]) if last else "none yet"),
          "| Scans recorded | %d |" % len(runs),
-         "| Next scheduled scan | not scheduled yet (scheduler: step 9, needs your approval) |",
+         "| Scheduler | LaunchAgent at :02, :17, :32, :47; full scan hourly while FX is open, after each 17:00 ET bar, and every run while a setup or position is open |",
          "| Registry chain | %s (%d records) |" % ("intact" if registry.verify() is None else "BROKEN", registry.count()),
          "| Last reconciliation | %s |" % (("OK" if recon[-1]["payload"]["ok"] else "MISMATCH") + " " + LC.et(recon[-1]["created_utc"]) if recon else "none yet"),
          "| Notifications | %d queued in total; accepted by channel: %s; %d failed/unknown (the local channel is a test file, not a phone) |" % (
@@ -242,7 +243,9 @@ def status_page(registry, cfg, now, snapshot=None, base_dir=None, mode="forward"
     L += ["", "MARKET WATCH triggers recorded: %d (alerted %d)." % (len(watch), sum(1 for w in watch if w["payload"].get("alerted"))), "",
           "## Scorecard (forward test; shadow; indicative prices; costs and financing estimated, unverified)", ""]
     for rule, r in rows.items():
-        L += ["**%s** (%s)" % (rule, cfg["forward_trials"][rule]), "", "> %s" % r["banner"], "",
+        L += ["**%s** (%s; rules v%s: pre-registration v0.2 with the v0.3 source amendment)" % (
+                  rule, cfg["forward_trials"][rule].split(" v0.2")[0] + cfg["forward_trials"][rule].split(" v0.2", 1)[-1],
+                  cfg["rules"][rule]["version"]), "", "> %s" % r["banner"], "",
               "| Metric | Value |", "|---|---|",
               "| Resolved signals | %d |" % r["n"],
               "| Mean net return per signal (base / stress costs) | %s / %s |" % (fmt(r["mean_base"]), fmt(r["mean_stress"])),

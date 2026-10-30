@@ -50,13 +50,13 @@ LOGS = BASE / "logs"
 
 
 def fetch_v03(now):
-    """Completed daily bars and a snapshot from the v0.3 sources. Keys keep the scanner's names."""
+    """Completed daily bars and a snapshot from the v0.3 sources, keyed by their source symbols."""
     from src.live_usdjpy import sources as SR
     o, a = SR.Oanda(), SR.Alpaca()
     fx = {"USD_JPY": o.daily("USD_JPY"), "GBP_USD": o.daily("GBP_USD")}
     eq = a.daily(("SPY", "GLD"), now=now)
     snap = SR.snapshot(now, oanda=o, alpaca=a, fx_bars=fx, gld_bars=eq["GLD"])
-    return {"JPY=X": fx["USD_JPY"], "GBPUSD=X": fx["GBP_USD"], "SPY": eq["SPY"], "GLD": eq["GLD"]}, snap
+    return {"USD_JPY": fx["USD_JPY"], "GBP_USD": fx["GBP_USD"], "SPY": eq["SPY"], "GLD": eq["GLD"]}, snap
 
 
 def fetch_rates(now, st):
