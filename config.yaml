@@ -319,6 +319,11 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     regime_lookback: 250
     event_horizon_hours: 24         # W003
     markets: {USDJPY: "USD_JPY (OANDA practice)", GOLD: "GLD (Alpaca IEX)", GBPUSD: "GBP_USD (OANDA practice)"}   # labels; Yahoo symbols until 2026-10-30
+  preflight:                        # Phase D readiness check before every scan (operational; not part of the frozen test)
+    clock_offset_limit_s: 5                   # local vs venue clock (HTTP Date, 1 s resolution) beyond this -> DEGRADED
+    events_max_age_hours: 26                  # event store older than this -> paper entries BLOCKED (blackouts unknown)
+    notification_stuck_minutes: 30            # a sendable notification not accepted by any provider -> DEGRADED
+    alert_after_consecutive: 2                # DEGRADED/BLOCKED must persist this many scans before an alert (no flapping)
   official_release_alerts:          # owner request 2026-10-30: NORMAL, information only (source, title, time, link)
     always_sources: ["Federal Reserve", "Bank of Japan"]
     key_title_sources: ["US Bureau of Labor Statistics", "US Bureau of Economic Analysis"]
