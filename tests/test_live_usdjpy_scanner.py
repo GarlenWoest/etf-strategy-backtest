@@ -15,7 +15,8 @@ from src.live_usdjpy import scanner as S
 from src.live_usdjpy import watch as W
 from src.live_usdjpy.registry import Registry
 
-CFG = yaml.safe_load((PROJECT_ROOT / "config.yaml").read_text())["live_usdjpy"]
+CFG_REAL = yaml.safe_load((PROJECT_ROOT / "config.yaml").read_text())["live_usdjpy"]
+CFG = dict(CFG_REAL, f002_first_month_end="2099-12-31")      # F001-focused tests: no F002 month-end catch-up
 NOW = datetime(2026, 11, 10, 20, 50, tzinfo=timezone.utc)                    # Tue 15:50 ET (no guard window)
 
 
@@ -191,3 +192,42 @@ def test_watch_alerts_mark_non_applicable_fields(reg):
     f = [n for n in kinds(reg, "notification") if "Consumer Price Index" in n["title"]][0]["fields"]
     assert "size" not in f and "max_planned_loss" not in f and "invalidation" not in f     # not applicable: omitted
     assert f["instrument"].startswith("JPY=X") and "UNKNOWN" not in f.values()
+
+
+
+# ---------------------------------------------------------------- v0.3 start and catch-up rule (DETECTED LATE)
+
+def test_first_scan_catches_the_oct_30_month_end_for_F002_and_labels_it_late(reg, tmp_path):
+    mon = datetime(2026, 11, 2, 21, 0, tzinfo=timezone.utc)                    # Mon 16:00 ET, first scan after 10-30
+    up = pd.Series(np.linspace(140, 150, 420), index=pd.bdate_range(end="2026-10-30", periods=420))
+    inp = inputs(last="2026-10-30")
+    inp.bars["JPY=X"] = pd.concat([up, pd.Series([150.2], index=[pd.Timestamp("2026-11-02")])]).iloc[:-1]
+    S.run_scan(reg, mon, inp, CFG_REAL, tmp_path)
+    f2 = [e for e in kinds(reg, "evaluation") if e.get("rule_id") == "F002"]
+    assert [(e["bar_date"], e["kind"], e["detected_late"]) for e in f2][0] == ("2026-10-30", "CANDIDATE", True)
+    tr = [t for t in kinds(reg, "setup_transition") if t["setup_id"] == "F002-2026-10"]
+    assert tr[0]["state"] == "triggered" and tr[0]["detected_late"] is True
+    n = [x for x in kinds(reg, "notification") if x["title"].startswith("DETECTED LATE: F002-2026-10")]
+    assert n and "DETECTED LATE" in n[0]["fields"]["trigger"]
+
+
+def test_F001_catch_up_evaluates_each_missed_bar_once_in_order(reg, tmp_path):
+    S.run_scan(reg, NOW, inputs(last="2026-11-04"), CFG, tmp_path)             # first scan: latest bar only
+    f1 = [e["bar_date"] for e in kinds(reg, "evaluation") if e.get("rule_id") == "F001"]
+    assert f1 == ["2026-11-04"]
+    later = NOW + timedelta(days=4)                                             # system down; three bars completed
+    S.run_scan(reg, later, inputs(last="2026-11-09"), CFG, tmp_path)
+    f1 = [(e["bar_date"], e["detected_late"]) for e in kinds(reg, "evaluation") if e.get("rule_id") == "F001"]
+    assert [d for d, _ in f1] == ["2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09"]
+    assert all(late for _, late in f1[1:])                                      # all detected after bar completion
+    S.run_scan(reg, later + timedelta(minutes=20), inputs(last="2026-11-09"), CFG, tmp_path)
+    assert len([e for e in kinds(reg, "evaluation") if e.get("rule_id") == "F001"]) == 4   # no re-evaluation
+
+
+def test_on_time_detection_is_not_labelled_late(reg, tmp_path):
+    just_after = datetime(2026, 11, 9, 22, 10, tzinfo=timezone.utc)            # Mon 17:10 ET, 10 min after bar completion
+    inp = inputs(last="2026-11-09")
+    inp.fx_prefiltered = True                                                   # OANDA: complete candles only (v0.3)
+    S.run_scan(reg, just_after, inp, CFG, tmp_path)
+    e = [x for x in kinds(reg, "evaluation") if x.get("rule_id") == "F001"][0]
+    assert e["bar_date"] == "2026-11-09" and e["detected_late"] is False

@@ -286,10 +286,10 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
   late_detection_minutes: 30
   f002_first_month_end: "2026-10-30"
   rules:
-    F001: {version: "0.2", trigger_z: -2.0, vol_window: 60, invalidation_mult: 1.0, target_mult: 0.5, expiry_fx_days: 2,
+    F001: {version: "0.3", trigger_z: -2.0, vol_window: 60, invalidation_mult: 1.0, target_mult: 0.5, expiry_fx_days: 2,
            exclude: ["scheduled FOMC or BoJ policy decision on day t", "Japanese or US bank holiday on day t (conservative temporary guard)"],
            mof_intervention: "flag and report separately; never delete"}
-    F002: {version: "0.2", lookback_months: 12, dead_band_log_return: 0.02, stop_monthly_sd_mult: 3.0, vol_window: 60}
+    F002: {version: "0.3", lookback_months: 12, dead_band_log_return: 0.02, stop_monthly_sd_mult: 3.0, vol_window: 60}
   sizing: {start_usd: 10000, risk_per_trade: 0.005, per_rule_max_x: 0.5, max_gross_x: 1.0}
   costs:
     base: {one_way: 0.00015, financing_admin_fee_annual: 0.0100}

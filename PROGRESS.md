@@ -37,7 +37,15 @@ _Last updated: 2026-10-28 evening (new development phase: Phase A re-verificatio
 - Step 9 plan approved; BLS contact goes in Keychain.
 - The Yahoo migration of the snapshot, paper books and watchlist comes in the step after the new sources pass their tests.
 
-**Waiting on the owner:** OANDA US practice account and token, and Alpaca paper account and keys. The owner stores them by running `tmp/setup_keys.command`, then says "keys set".
+**Done 10-29 evening:**
+- **Keys set** by the owner, in Keychain.
+- **Read-only OANDA and Alpaca clients,** with order-blocking tests; real quotes verified.
+- **v0.3 amendment FROZEN** (`377567b`).
+- **Scanner catch-up** with DETECTED LATE labels.
+- **`run` command** (`tools/usdjpy_pipeline.py run`); a `--demo` run on real data works.
+- **Plist** at `tmp/launchd/local.trading-research.usdjpy-runner.plist`, linted, NOT installed.
+
+**WAITING:** the owner's go-ahead to install (commands in chat 10-29 and in section 9.7 of `reports/phaseH_reliability.md`). The first forward scan happens at the first agent run.
 
 **Then, in order:**
 1. Build the read-only OANDA and Alpaca clients, with a test that blocks order endpoints.

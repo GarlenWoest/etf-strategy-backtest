@@ -12,7 +12,7 @@ DEMO runs use a separate registry and are labelled DEMO; the forward registry st
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -44,6 +44,7 @@ class ScanInputs:
     events_store: dict                     # live/events/events.json content
     mode: str = "forward"                  # "forward" or "demo"
     rates: dict = field(default_factory=dict)   # {"usd": (annual rate or None, info), "jpy": (...)} for financing
+    fx_prefiltered: bool = False                 # True for OANDA candles: already complete-only (v0.3)
 
 
 def completed(series, kind, now):
@@ -51,6 +52,8 @@ def completed(series, kind, now):
     if series is None or len(series) == 0:
         return series
     s = series.dropna()
+    if kind == "complete":
+        return s
     if kind == "fx":
         cut = now.astimezone(timezone.utc).date()                     # bars dated before today's UTC date
         return s[s.index.date < cut]
@@ -67,6 +70,29 @@ def fx_days_between(a, b):
         if d.weekday() < 5:
             n += 1
     return n
+
+
+def eval_plan(registry, mode, fx, cfg):
+    """Which (rule, bar date) pairs this scan evaluates (v0.3 start and catch-up rule):
+    F001: every completed bar after the last evaluated one (the latest bar only on the very first scan);
+    F002: the latest bar (due or not), plus the most recent month-end on or after f002_first_month_end that has
+    no evaluation yet. Each pair is evaluated once (the evaluation's idempotency key)."""
+    if fx is None or len(fx) == 0:
+        return []
+    dates = [x.date() for x in fx.index]
+    latest = dates[-1]
+    have = lambda rid, d: registry.get_by_key("eval:%s:%s:%s" % (mode, rid, d.isoformat())) is not None
+    done1 = sorted(r["payload"]["bar_date"] for r in registry.records("evaluation")
+                   if r["payload"].get("type") == "rule_signal" and r["payload"].get("rule_id") == "F001" and r["payload"].get("bar_date"))
+    f1 = [d for d in dates if d.isoformat() > done1[-1]][-30:] if done1 else [latest]
+    plan = [("F001", d) for d in f1 if not have("F001", d)]
+    first = date.fromisoformat(cfg.get("f002_first_month_end", "1900-01-01"))
+    ends = [d for d in dates if d >= first and RL.last_fx_weekday_of_month(d) == d and not have("F002", d)]
+    if ends and ends[-1] != latest:
+        plan.append(("F002", ends[-1]))
+    if not have("F002", latest):
+        plan.append(("F002", latest))
+    return plan
 
 
 def holidays_for(years):
@@ -97,10 +123,11 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
     rules_cfg = cfg["rules"]
     obs = {o["specialist"]: o for o in inp.snapshot.get("observations", []) if o.get("role") == "primary"}
     uj = obs.get("usdjpy", {})
-    fx = completed(inp.bars.get("JPY=X"), "fx", now)
+    fxk = "complete" if inp.fx_prefiltered else "fx"
+    fx = completed(inp.bars.get("JPY=X"), fxk, now)
     spy = completed(inp.bars.get("SPY"), "nyse", now)
     watch_bars = {"USDJPY": fx, "GOLD": completed(inp.bars.get("GLD"), "nyse", now),
-                  "GBPUSD": completed(inp.bars.get("GBPUSD=X"), "fx", now)}
+                  "GBPUSD": completed(inp.bars.get("GBPUSD=X"), fxk, now)}
     events = list((inp.events_store.get("events") or {}).values())
     hol = holidays_for({now.year - 1, now.year})
     view = G.MarketView(now=now, price_freshness=uj.get("freshness", "UNAVAILABLE"), price_age_s=uj.get("age_s") or -1,
@@ -121,12 +148,16 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
         registry.append("market_state", state_rec, now=now)
         kill_on = G.kill_flag_path(base_dir).exists()
         slot_s = slot.strftime("%Y%m%dT%H%MZ")
-        sigs = {rid: fn(RL.RuleInputs(fx=fx if fx is not None else pd.Series(dtype=float), spy=spy if spy is not None else pd.Series(dtype=float),
-                                      live_price=uj.get("last"), events=events, holidays=hol), rules_cfg[rid])
-                for rid, fn in RL.RULES.items()}
+        evals = []                                                   # (rule, signal, detected_late)
+        for rid, d in eval_plan(registry, inp.mode, fx, cfg):
+            fx_d = fx.loc[:pd.Timestamp(d)] if fx is not None else pd.Series(dtype=float)
+            spy_d = spy.loc[:pd.Timestamp(d)] if spy is not None else pd.Series(dtype=float)
+            sig = RL.RULES[rid](RL.RuleInputs(fx=fx_d, spy=spy_d, live_price=uj.get("last"), events=events, holidays=hol), rules_cfg[rid])
+            done_at = datetime.combine(d, time(17, 0), tzinfo=NY)
+            evals.append((rid, sig, (now - done_at) > timedelta(minutes=cfg.get("late_detection_minutes", 30))))
         S_mark = uj.get("last")
-        f2 = sigs["F002"]
-        new_f002_bar = f2.bar_date if f2.kind in ("CANDIDATE", "NO_TRADE") and f2.setup_id else None
+        f2m = [s_ for r_, s_, _ in evals if r_ == "F002" and s_.kind in ("CANDIDATE", "NO_TRADE") and s_.setup_id]
+        new_f002_bar = f2m[-1].bar_date if f2m else None
         ledger_risk = PP.manage(registry, cfg, now, S_mark, inp.rates, slot_s, new_f002_bar) if S_mark else {}
         summary["paper"] = {r: v[0] for r, v in ledger_risk.items()}
         for rid, (st_, info) in ledger_risk.items():
@@ -136,17 +167,18 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                 registry.append("notification", LC.alert("HIGH", "%s sub-ledger HALTED: %s" % (rid, "; ".join(info["why"])),
                                                          **{"class": "RISK/SYSTEM ALERT", "event_time_et": LC.et(now),
                                                             "why_sent": "pre-registered risk limit"}), now=now)
-        for rid in RL.RULES:
+        for rid, sig, late in evals:
             p = rules_cfg[rid]
-            sig = sigs[rid]
-            ev = registry.append("evaluation", {"type": "rule_signal", **sig.as_dict(), "inputs_sha256": state_rec["inputs_sha256"]},
+            late_txt = " | DETECTED LATE (system was not running at bar completion %s 17:00 ET)" % sig.bar_date if late else ""
+            ev = registry.append("evaluation", {"type": "rule_signal", **sig.as_dict(), "inputs_sha256": state_rec["inputs_sha256"],
+                                                "detected_late": late, "detected_utc": now.astimezone(timezone.utc).isoformat()},
                                  idem_key="eval:%s:%s:%s" % (inp.mode, rid, sig.bar_date), now=now)
             summary["evaluations"].append((rid, sig.kind, ev["duplicate"]))
             fields = dict(market="USDJPY", instrument="JPY=X", setup_id=sig.setup_id, rule_version="%s v%s" % (rid, sig.version),
                           event_time_et="bar %s" % sig.bar_date, quote_time_et=LC.et(uj.get("source_ts_utc")),
                           reference_price=sig.entry_ref, price_label="%s (indicative, not executable)" % uj.get("freshness", "UNKNOWN"),
                           session=", ".join((inp.snapshot.get("clock") or {}).get("active_sessions", []) or []) or "none open",
-                          direction={1: "LONG USD/JPY", -1: "SHORT USD/JPY"}.get(sig.direction, "none"), trigger=sig.reason,
+                          direction={1: "LONG USD/JPY", -1: "SHORT USD/JPY"}.get(sig.direction, "none"), trigger=sig.reason + late_txt,
                           invalidation=sig.invalidation, target_or_exit="target %s; %s" % (sig.target if sig.target else "none", sig.expiry_rule),
                           estimated_costs="round trip %.3f%% of notional (base, unverified) + financing (estimated, unverified)"
                                           % (200 * cfg["costs"]["base"]["one_way"]),
@@ -160,8 +192,9 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                 if LC.transition(registry, sig.setup_id, "watching", {"bar_date": sig.bar_date, "reason": sig.reason}, fields, now):
                     summary["transitions"].append((sig.setup_id, "watching"))
             if sig.kind == "CANDIDATE" and LC.current(registry, sig.setup_id) in (None, "detected", "watching"):
-                LC.transition(registry, sig.setup_id, "triggered", {"bar_date": sig.bar_date, "signal": sig.as_dict(),
-                              "detected_ny_date": now.astimezone(NY).date().isoformat()}, fields, now)
+                LC.transition(registry, sig.setup_id, "triggered", {"bar_date": sig.bar_date, "signal": sig.as_dict(), "detected_late": late,
+                              "detected_ny_date": now.astimezone(NY).date().isoformat()}, fields, now,
+                              title=("DETECTED LATE: %s TRIGGERED" if late else "%s TRIGGERED") % sig.setup_id)
                 summary["transitions"].append((sig.setup_id, "triggered"))
         # pending setups: gate them (entries need the paper order manager, step 7), expire or invalidate them
         for sid, st in LC.open_setups(registry).items():

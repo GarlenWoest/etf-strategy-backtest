@@ -1,7 +1,9 @@
 """USD/JPY forward system CLI (plain Python; no LLM; no orders; no broker).
 
-  scan [--demo]               refresh the market snapshot, fetch completed daily bars, run one scan
-                              (--demo writes to the DEMO registry; the forward registry starts at activation, step 9)
+  run                         what the LaunchAgent calls every 15 minutes: plans the run (scan / event poll / notify),
+                              records gaps, catches up missed bars (DETECTED LATE), scores, writes the status page
+  scan [--demo]               one scan now with OANDA practice (FX) + Alpaca IEX (SPY, GLD) data (v0.3 sources)
+                              (--demo writes to the DEMO registry)
   kill --reason "<text>"      kill switch: HALTED now, flag file live/usdjpy/KILL_SWITCH, HIGH alert queued
   resume --confirm RESUME     manual re-enable only
   notify [--local-only]       queue the daily digest / liveness alerts if due, then deliver the outbox
@@ -12,10 +14,11 @@
   verify                      check the registry hash chain
   status                      one-line state summary
 
-Daily bars come from Yahoo Finance via yfinance (indicative; not executable). Owner decision D1 (2026-10-29): trailing
-windows may reach into 2024-2026 for computing live signals only; they are held in memory and only digests and the
-values a rule used are stored, in the registry under live/usdjpy/. Nothing is written outside live/usdjpy/ except the
-snapshot that tools/market_intel.py itself writes to live/intel/.
+Data (v0.3 amendment, 2026-10-29): OANDA v20 PRACTICE API (USD/JPY, GBP/USD; read-only pricing and candles) and
+Alpaca market data (SPY, GLD; IEX). Yahoo is not used here (its terms prohibit automated collection). Financing
+rates: FRED DTB3 and FRED IRSTCI01JPM156N (Japan call money, monthly), cached daily. Owner decision D1: trailing
+windows may reach into 2024-2026 for computing live signals only; only digests and the values a rule used are stored,
+in the registry under live/usdjpy/. Credentials are read from the Keychain at call time and never printed.
 """
 import json
 import subprocess
@@ -39,20 +42,149 @@ from src.live_usdjpy.registry import Registry  # noqa: E402
 
 CFG = yaml.safe_load((ROOT / "config.yaml").read_text())["live_usdjpy"]
 BASE = ROOT / "live" / "usdjpy"
-SYMBOLS = ["JPY=X", "SPY", "GLD", "GBPUSD=X"]
+LOCK = BASE / "runner.lock"
+LOGS = BASE / "logs"
 
 
-def fetch_bars(now):
-    import pandas as pd
-    import yfinance as yf
-    df = yf.download(SYMBOLS, start=(now - timedelta(days=620)).date().isoformat(), auto_adjust=False, progress=False,
-                     threads=False)
+def fetch_v03(now):
+    """Completed daily bars and a snapshot from the v0.3 sources. Keys keep the scanner's names."""
+    from src.live_usdjpy import sources as SR
+    o, a = SR.Oanda(), SR.Alpaca()
+    fx = {"USD_JPY": o.daily("USD_JPY"), "GBP_USD": o.daily("GBP_USD")}
+    eq = a.daily(("SPY", "GLD"), now=now)
+    snap = SR.snapshot(now, oanda=o, alpaca=a, fx_bars=fx, gld_bars=eq["GLD"])
+    return {"JPY=X": fx["USD_JPY"], "GBPUSD=X": fx["GBP_USD"], "SPY": eq["SPY"], "GLD": eq["GLD"]}, snap
+
+
+def fetch_rates(now, st):
+    """US 3-month T-bill (FRED DTB3) and Japan call money (FRED IRSTCI01JPM156N), annual decimals; cached per day."""
+    day = now.date().isoformat()
+    if st.get("rates_day") == day and st.get("rates"):
+        return {k: tuple(v) for k, v in st["rates"].items()}
+    import requests
     out = {}
-    for s in SYMBOLS:
-        c = df["Close"][s].dropna()
-        c.index = pd.to_datetime(c.index).tz_localize(None).normalize()
-        out[s] = c
+    for key, sid in (("usd", "DTB3"), ("jpy", "IRSTCI01JPM156N")):
+        try:
+            r = requests.get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=%s" % sid, timeout=30)
+            rows = [l.split(",") for l in r.text.strip().splitlines()[1:]]
+            rows = [x for x in rows if len(x) == 2 and x[1] not in (".", "")]
+            out[key] = (float(rows[-1][1]) / 100.0, "FRED %s %s" % (sid, rows[-1][0]))
+        except Exception as ex:
+            out[key] = (None, "UNKNOWN (%s)" % type(ex).__name__)
+    st["rates_day"], st["rates"] = day, {k: list(v) for k, v in out.items()}
     return out
+
+
+def state_path(demo):
+    return BASE / ("runner_state_demo.json" if demo else "runner_state.json")
+
+
+def load_state(demo=False):
+    try:
+        return json.loads(state_path(demo).read_text())
+    except Exception:
+        return {}
+
+
+def save_state(st, demo=False):
+    sys.path.insert(0, str(ROOT / "tools"))
+    from atomic_io import write_text
+    write_text(state_path(demo), json.dumps(st, indent=1))
+
+
+def rotate_logs(limit=5_000_000):
+    for f in LOGS.glob("*.log") if LOGS.exists() else []:
+        if f.stat().st_size > limit:
+            f.write_text("[log truncated at %s; previous content exceeded %d bytes]\n" % (datetime.now(timezone.utc).isoformat(), limit))
+
+
+def run(demo=False):
+    """One LaunchAgent run (see src/live_usdjpy/runner.py for the plan). demo=True: DEMO registry, its own state
+    file, notifications to the local test file only (never the phone)."""
+    import fcntl
+    import os
+    from src.live_usdjpy import runner as RN
+    from src.live_usdjpy import scorer as SC
+    BASE.mkdir(parents=True, exist_ok=True)
+    LOGS.mkdir(parents=True, exist_ok=True)
+    rotate_logs()
+    lk = open(LOCK, "w")
+    try:
+        fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("RUN SKIPPED %s: the previous run is still active" % datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        return
+    now = datetime.now(timezone.utc)
+    st = load_state(demo)
+    reg = registry(demo)
+    mode = "demo" if demo else "forward"
+    channels = [N.LocalFile(BASE / "outbox_local_demo.jsonl")] if demo else [N.Pushover(CFG["notifications"]["pushover"]), N.Ntfy(CFG["notifications"]["ntfy"])]
+    done = []
+    try:
+        gap = RN.gap_record(st, now)
+        if gap:
+            reg.append("note", gap, idem_key="gap:%s" % gap["from_utc"], now=now)
+            done.append("gap %.0f min recorded" % gap["minutes"])
+        ev_p = ROOT / "live" / "events" / "events.json"
+        events = json.loads(ev_p.read_text()) if ev_p.exists() else {"events": {}}
+        today = now.astimezone(RN.NY).date().isoformat()
+        rel = [datetime.fromisoformat(e["scheduled_time_utc"]) for e in (events.get("events") or {}).values()
+               if e.get("scheduled_time_utc") and str(e.get("scheduled_date")) == today]
+        from src.live_usdjpy import lifecycle as LCm, paper as PPm
+        active = bool([s_ for s_ in LCm.open_setups(reg).values() if s_["state"] in ("triggered", "blocked", "entered")]) or \
+            any(PPm.state(reg, r_, CFG)["position"] for r_ in CFG["rules"])
+        tasks, why = RN.plan(now, st, active, rel)
+        if "events" in tasks:
+            env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": os.environ.get("HOME", "")}
+            bls = N.secret("trading-research-bls-contact")
+            if bls:
+                env["BLS_CONTACT_EMAIL"] = bls
+            r = subprocess.run([sys.executable, "-I", str(ROOT / "tools" / "events.py"), "poll"], env=env,
+                               capture_output=True, text=True, timeout=600)
+            del env
+            st["last_events_poll_utc"] = now.isoformat()
+            events = json.loads(ev_p.read_text()) if ev_p.exists() else events
+            done.append("events poll exit %d%s" % (r.returncode, "" if bls else " (BLS contact not configured: BLS skipped)"))
+        if "scan" in tasks:
+            bars, snap = fetch_v03(now)
+            rates = fetch_rates(now, st)
+            out = S.run_scan(reg, now, S.ScanInputs(snapshot=snap, bars=bars, events_store=events, mode=mode,
+                                                    rates=rates, fx_prefiltered=True), CFG, BASE)
+            st["last_scan_utc"] = now.isoformat()
+            st["last_snapshot"] = {"generated_utc": snap.get("generated_utc"), "status": snap.get("status"),
+                                   "observations": [{k: o.get(k) for k in ("specialist", "role", "freshness", "source_ts_utc")}
+                                                    for o in snap.get("observations", [])]}
+            SC.score_closed(reg, CFG, now)
+            sys.path.insert(0, str(ROOT / "tools"))
+            from atomic_io import write_text
+            write_text(BASE / ("STATUS_DEMO.md" if demo else "STATUS.md"), SC.status_page(reg, CFG, now, snap, BASE, mode))
+            done.append("scan %s" % json.dumps({k: out.get(k) for k in ("evaluations", "transitions", "gate", "watch", "reconciled", "duplicate")}, default=str))
+        ncfg = CFG["notifications"]
+        snap_for_digest = st.get("last_snapshot") or {}
+        N.queue_digest(reg, now, ncfg, snap_for_digest)
+        N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now))
+        sent = N.dispatch(reg, now, channels, ncfg)
+        done.append("notify %d action(s)" % len(sent))
+        st["last_run_utc"] = now.isoformat()
+        save_state(st, demo)
+        print("RUN OK %s | %s | %s" % (now.isoformat(timespec="seconds"), "; ".join(why) or "notify only", "; ".join(done)))
+    except Exception as ex:
+        msg = "%s: %s" % (type(ex).__name__, str(ex)[:200])
+        try:
+            reg.append("notification", LC.alert("HIGH", "RUNNER ERROR: %s" % type(ex).__name__,
+                                                **{"class": "RISK/SYSTEM ALERT", "event_time_et": LC.et(now), "why_sent": msg}),
+                       idem_key="runner-error:%s:%s" % (type(ex).__name__, now.strftime("%Y%m%dT%H")), now=now)
+            N.dispatch(reg, now, channels, CFG["notifications"])
+        except Exception:
+            pass
+        st["last_run_utc"] = now.isoformat()
+        save_state(st, demo)
+        print("RUN ERROR %s | %s" % (now.isoformat(timespec="seconds"), msg))
+        sys.exit(1)
+    finally:
+        reg.close()
+        fcntl.flock(lk, fcntl.LOCK_UN)
+        lk.close()
 
 
 def registry(demo):
@@ -62,19 +194,16 @@ def registry(demo):
 def main(a):
     cmd = a[1] if len(a) > 1 else ""
     demo = "--demo" in a
-    if cmd == "scan":
+    if cmd == "run":
+        run(demo)
+    elif cmd == "scan":
         now = datetime.now(timezone.utc)
-        r = subprocess.run([sys.executable, "-I", str(ROOT / "tools" / "market_intel.py"), "snapshot"],
-                           capture_output=True, text=True, timeout=300)
-        if r.returncode != 0:
-            print("SCAN WARNING: snapshot refresh failed (exit %d); using the last snapshot on file" % r.returncode)
-        snap = json.loads((ROOT / "live" / "intel" / "latest.json").read_text())
         ev_p = ROOT / "live" / "events" / "events.json"
         events = json.loads(ev_p.read_text()) if ev_p.exists() else {"events": {}}
-        bars = fetch_bars(now)
+        bars, snap = fetch_v03(now)
         reg = registry(demo)
-        out = S.run_scan(reg, now, S.ScanInputs(snapshot=snap, bars=bars, events_store=events,
-                                                mode="demo" if demo else "forward"), CFG, BASE)
+        out = S.run_scan(reg, now, S.ScanInputs(snapshot=snap, bars=bars, events_store=events, mode="demo" if demo else "forward",
+                                                rates=fetch_rates(now, {}), fx_prefiltered=True), CFG, BASE)
         reg.close()
         print("SCAN %s: %s" % ("DEMO" if demo else "FORWARD", json.dumps(out, default=str)))
     elif cmd == "kill":
