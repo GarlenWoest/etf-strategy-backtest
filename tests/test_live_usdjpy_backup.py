@@ -162,3 +162,12 @@ def test_offsite_push_failures_alert_and_the_push_records_only_the_tool_result(e
     assert set(calls[0]) == {"PATH", "HOME"}                       # no other environment (no secrets) passed on
     probs = dict(BK.health(reg, T0 + timedelta(hours=2), CFG, root, offsite={"state": "OK", "age_days": 0.5}))
     assert "push" in probs and len(_high(reg)) == 1
+
+
+def test_a_snapshot_earlier_the_same_day_does_not_cancel_the_evening_snapshot(env):
+    """Regression 2026-10-30: a manual 09:47 ET snapshot made the 17:32 ET run skip the evening snapshot and push."""
+    root, reg = env
+    morning = datetime(2026, 11, 2, 14, 47, tzinfo=timezone.utc)      # Mon 09:47 ET
+    BK.record(reg, morning, BK.snapshot(reg, morning, CFG, root))
+    assert not BK.due(reg, datetime(2026, 11, 2, 22, 17, tzinfo=timezone.utc), CFG)    # 17:17 ET: before the cutoff
+    assert BK.due(reg, datetime(2026, 11, 2, 22, 32, tzinfo=timezone.utc), CFG)        # 17:32 ET: evening snapshot due

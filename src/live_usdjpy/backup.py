@@ -169,7 +169,8 @@ def due(registry, now, cfg):
         return True
     ny = now.astimezone(NY)
     h, m = (int(x) for x in cfg["daily_after_et"].split(":"))
-    return (ny.hour, ny.minute) >= (h, m) and last.astimezone(NY).date() < ny.date()
+    cutoff = ny.replace(hour=h, minute=m, second=0, microsecond=0)
+    return ny >= cutoff and last < cutoff                    # the evening snapshot (after the bar), even if one ran earlier today
 
 
 def offsite_status(root, cfg):
