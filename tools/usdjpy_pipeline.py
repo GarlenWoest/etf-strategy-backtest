@@ -12,6 +12,8 @@
   score                       score closed paper positions (once each) and write the status page
                               live/usdjpy/STATUS.md (STATUS_DEMO.md with --demo)
   verify                      check the registry hash chain
+  backup snapshot|restore-test [--source published|local-git|offsite]|status
+                              forward-registry snapshot (SQLite backup API, verified), restore test into tmp/, status
   status                      one-line state summary
 
 Data (v0.3 amendment, 2026-10-29): OANDA v20 PRACTICE API (USD/JPY, GBP/USD; read-only pricing and candles) and
@@ -34,6 +36,7 @@ sys.path.insert(0, str(ROOT))
 import yaml  # noqa: E402
 
 from src import clock as K  # noqa: E402
+from src.live_usdjpy import backup as BK  # noqa: E402
 from src.live_usdjpy import gate as G  # noqa: E402
 from src.live_usdjpy import lifecycle as LC  # noqa: E402
 from src.live_usdjpy import notify as N  # noqa: E402
@@ -159,9 +162,19 @@ def run(demo=False):
             from atomic_io import write_text
             write_text(BASE / ("STATUS_DEMO.md" if demo else "STATUS.md"), SC.status_page(reg, CFG, now, snap, BASE, mode))
             done.append("scan %s" % json.dumps({k: out.get(k) for k in ("evaluations", "transitions", "gate", "watch", "reconciled", "duplicate")}, default=str))
+        if not demo:                                                # forward registry only: verified snapshot once a day
+            bcfg = CFG["backup"]
+            if BK.due(reg, now, bcfg):
+                res = BK.snapshot(reg, now, bcfg, ROOT)
+                BK.record(reg, now, res)
+                done.append("backup %s" % ("OK (%s records)" % res["records"] if res["ok"] else "FAILED: %s" % res.get("error")))
+            if BK.health(reg, now, bcfg, ROOT):
+                done.append("backup health problem alerted")
         ncfg = CFG["notifications"]
         snap_for_digest = st.get("last_snapshot") or {}
-        N.queue_digest(reg, now, ncfg, snap_for_digest)
+        pos = [r_ for r_ in CFG["rules"] if PPm.state(reg, r_, CFG)["position"]]
+        N.queue_digest(reg, now, ncfg, snap_for_digest, positions=", ".join(pos) or "none",
+                       extra=None if demo else BK.summary_line(reg, now, CFG["backup"], ROOT))
         sent = N.dispatch(reg, now, channels, ncfg)                 # deliver first: a digest queued this run counts
         if N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now)):
             sent += N.dispatch(reg, now, channels, ncfg)           # deliver any liveness alert raised just now
@@ -269,6 +282,28 @@ def main(a):
         print("STATE %s | kill switch %s | scans %d | last scan %s | records %d" % (
             st["state"], "ON" if G.kill_flag_path(BASE).exists() else "off", len(runs),
             runs[-1]["payload"]["completed_utc"] if runs else "none", reg.count()))
+        reg.close()
+    elif cmd == "backup":
+        sub = a[2] if len(a) > 2 else "status"
+        bcfg = CFG["backup"]
+        reg = registry(False)
+        now = datetime.now(timezone.utc)
+        if sub == "snapshot":                       # manual snapshot; takes the runner's lock so no scan writes meanwhile
+            import fcntl
+            with open(LOCK, "w") as lk:
+                fcntl.flock(lk, fcntl.LOCK_EX)
+                res = BK.snapshot(reg, now, bcfg, ROOT)
+                BK.record(reg, now, res)
+            print("BACKUP SNAPSHOT %s: %s" % ("OK" if res["ok"] else "FAILED", json.dumps(
+                {k: res.get(k) for k in ("records", "integrity", "chain", "sha256", "published", "error")})))
+        elif sub == "restore-test":
+            src = a[a.index("--source") + 1] if "--source" in a else "published"
+            res = BK.restore_test(ROOT, bcfg, reg, source=src)
+            BK.record(reg, now, res)
+            print("RESTORE TEST %s: %s" % ("PASS" if res["ok"] else "FAIL", json.dumps(
+                {k: res.get(k) for k in ("source", "records", "integrity", "chain", "matches_live_prefix", "temp_folder_removed", "error")})))
+        else:
+            print(BK.summary_line(reg, now, bcfg, ROOT))
         reg.close()
     else:
         sys.exit(__doc__)

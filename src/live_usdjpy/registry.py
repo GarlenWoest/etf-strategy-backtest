@@ -26,7 +26,7 @@ from pathlib import Path
 
 KINDS = ("scan_run", "market_state", "evaluation", "setup_transition", "risk_state", "order_event", "fill",
          "position_snapshot", "reconciliation", "outcome", "notification", "kill_switch", "preregistration", "note",
-         "market_watch", "delivery")
+         "market_watch", "delivery", "backup")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS records (
@@ -58,6 +58,21 @@ def canonical(payload):
 def record_hash(record_id, kind, created_utc, idem_key, payload_json, prev_hash):
     s = "|".join([record_id, kind, created_utc, idem_key or "", payload_json, prev_hash])
     return hashlib.sha256(s.encode()).hexdigest()
+
+
+def verify_chain(conn):
+    """Recompute the whole hash chain on any sqlite3 connection (also a read-only one, e.g. a backup snapshot).
+    None if intact, otherwise a description of the first broken record."""
+    prev = ""
+    for r in conn.execute("SELECT seq, record_id, kind, created_utc, idem_key, payload, prev_hash, hash "
+                          "FROM records ORDER BY seq"):
+        seq, rid, kind, created, key, pj, ph, h = r
+        if ph != prev:
+            return "record %d (%s): prev_hash does not match the previous record" % (seq, rid)
+        if record_hash(rid, kind, created, key, pj, ph) != h:
+            return "record %d (%s): content does not match its hash" % (seq, rid)
+        prev = h
+    return None
 
 
 class Registry:
@@ -134,16 +149,7 @@ class Registry:
 
     def verify(self):
         """None if the chain is intact, otherwise a description of the first broken record."""
-        prev = ""
-        for r in self.db.execute("SELECT seq, record_id, kind, created_utc, idem_key, payload, prev_hash, hash "
-                                 "FROM records ORDER BY seq"):
-            seq, rid, kind, created, key, pj, ph, h = r
-            if ph != prev:
-                return "record %d (%s): prev_hash does not match the previous record" % (seq, rid)
-            if record_hash(rid, kind, created, key, pj, ph) != h:
-                return "record %d (%s): content does not match its hash" % (seq, rid)
-            prev = h
-        return None
+        return verify_chain(self.db)
 
     def snapshot(self, dest):
         """Consistent copy via SQLite's online backup API (safe while the database is open)."""

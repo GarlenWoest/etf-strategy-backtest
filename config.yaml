@@ -336,6 +336,15 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
                credentials: "macOS Keychain items 'trading-research-pushover-token' and 'trading-research-pushover-user' (owner sets them; never in files, logs or git)"}
     ntfy: {server: "https://ntfy.sh", priority: {HIGH: 5, NORMAL: 3, LOW: 2},
            credentials: "macOS Keychain item 'trading-research-ntfy-topic' (a long random topic name; owner sets it)"}
+  backup:                           # forward-registry snapshots (next phase, Phase B, 2026-10-30; operational, not part of the frozen test)
+    publish_dir: live/usdjpy_backup           # verified snapshot + JSONL export + manifest; inside the existing private-backup allow-list (live/)
+    local_dir: live/usdjpy/local_snapshots    # dated local copies; matched by the existing exclude rule, so never pushed
+    keep_local: 30
+    daily_after_et: "17:30"                   # once per New York day after the 17:00 bar scan
+    max_age_hours: 30                         # newest verified snapshot older than this -> HIGH alert
+    fail_alert_after: 2                       # this many consecutive failed attempts -> HIGH alert
+    offsite_max_age_days: 9                   # private-repo copy (pushed by the Sunday task) older than this -> HIGH alert
+    offsite_required_from: "2026-10-30"       # the off-site check starts counting from this date
   paper:                            # internal simulator (master prompt step 7); conventions follow the frozen pre-registration
     fill: "snapshot price x (1 + c) when buying USD (long entry, short exit); x (1 - c) when selling USD"
     financing: "position legs only (cash earns nothing, matching the cash baseline): USD leg x r_usd x days/360, JPY leg x r_jpy x days/365, minus |USD exposure| x admin fee x days/365; at each 17:00 ET roll, 3 days on Wednesday"

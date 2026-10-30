@@ -247,7 +247,7 @@ def dispatch(registry, now, channels, cfg):
 
 # ---------------------------------------------------------------- liveness: digest, gaps
 
-def queue_digest(registry, now, cfg, snapshot=None):
+def queue_digest(registry, now, cfg, snapshot=None, extra=None, positions=None):
     """Once per New York day at/after digest time: LOW 'system alive' message."""
     ny = now.astimezone(NY)
     if (ny.hour, ny.minute) < _hm(cfg["digest_time_et"]):
@@ -259,10 +259,11 @@ def queue_digest(registry, now, cfg, snapshot=None):
     opens = LC.open_setups(registry)
     day = ny.date().isoformat()
     sent_today = [r for r in registry.records("notification") if LC.et(r["created_utc"]).startswith(day)]
-    body = ("System alive. Last successful scan: %s. Data freshness: %s. Open setups: %s. Open paper positions: none "
-            "(paper order manager not built yet). Alerts queued today: %d." % (
+    body = ("System alive. Last successful scan: %s. Data freshness: %s. Open setups: %s. Open paper positions: %s. "
+            "Alerts queued today: %d.%s" % (
                 LC.et(last), "; ".join("%s %s" % kv for kv in fresh.items()) or "UNKNOWN",
-                ", ".join("%s %s" % (k, v["state"]) for k, v in opens.items()) or "none", len(sent_today)))
+                ", ".join("%s %s" % (k, v["state"]) for k, v in opens.items()) or "none",
+                positions if positions is not None else "UNKNOWN", len(sent_today), " " + extra if extra else ""))
     r = registry.append("notification", {"status": "queued", "priority": "LOW", "title": "Daily digest %s" % day,
                                          "body": body, "kind": "digest", "ny_date": day}, idem_key="digest:%s" % day, now=now)
     return not r["duplicate"]
