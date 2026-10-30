@@ -205,3 +205,39 @@ def summary(pf):
     if pf["blocks"]:
         s += " | fail-closed: %s" % ", ".join(pf["blocks"])
     return s
+
+
+NOT_ALERTED_HERE = ("backup", "previous run")                # these have their own HIGH alerts (no duplicates)
+
+
+def record(registry, now, pf, cfg, slot_key):
+    """Store the preflight result and alert only when a problem persists `alert_after_consecutive` scans:
+    BLOCKED -> HIGH, DEGRADED -> NORMAL; one alert per problem set per New York day; a recovery notice (NORMAL) when
+    an alerted problem clears. Returns the alert title queued, if any."""
+    from zoneinfo import ZoneInfo
+    from . import lifecycle as LC
+    ny = now.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    bad = sorted({c["check"] for c in pf["checks"] if c["status"] in ("DEGRADED", "BLOCKED") and c["check"] not in NOT_ALERTED_HERE})
+    level = "BLOCKED" if any(c["status"] == "BLOCKED" for c in pf["checks"] if c["check"] in bad) else ("DEGRADED" if bad else "READY")
+    prev = [r["payload"] for r in registry.records("preflight")][-(cfg["alert_after_consecutive"] - 1 or 1):]
+    persists = bad and len(prev) >= cfg["alert_after_consecutive"] - 1 and all(set(p_.get("alert_checks", [])) & set(bad) for p_ in prev)
+    title = None
+    if persists:
+        text = "; ".join("%s: %s" % (c["check"], c["detail"]) for c in pf["checks"] if c["check"] in bad)
+        title = "MONITORING %s: %s" % (level, ", ".join(bad))
+        r = registry.append("notification", LC.alert(
+            "HIGH" if level == "BLOCKED" else "NORMAL", title,
+            **{"class": "RISK/SYSTEM ALERT" if level == "BLOCKED" else "MONITORING STATUS", "event_time_et": LC.et(now),
+               "why_sent": text[:600] + (" | fail-closed: %s" % ", ".join(pf["blocks"]) if pf["blocks"] else "")}),
+            idem_key="preflight:%s:%s:%s" % (level, ",".join(bad), ny), now=now)
+        if r["duplicate"]:
+            title = None
+    alerted_before = any(p_.get("alerted") for p_ in prev[-1:])
+    if level == "READY" and alerted_before:
+        title = "MONITORING RECOVERED: all preflight checks OK"
+        registry.append("notification", LC.alert("NORMAL", title, **{"class": "MONITORING STATUS", "event_time_et": LC.et(now),
+                                                                     "why_sent": "previous problem cleared"}),
+                        idem_key="preflight:recovered:%s" % now.isoformat(), now=now)
+    registry.append("preflight", dict(pf, alert_checks=bad, alerted=bool(persists) or (alerted_before and level != "READY")),
+                    idem_key="preflight:%s" % slot_key, now=now)
+    return title

@@ -192,6 +192,19 @@ def offsite_status(root, cfg):
 
 def health(registry, now, cfg, root, offsite=None):
     """Problems as (reason_key, text). Also queues one HIGH RISK/SYSTEM alert per reason per New York day."""
+    probs = problems(registry, now, cfg, root, offsite)
+    day = now.astimezone(NY).date().isoformat()
+    for key, text in probs:
+        registry.append("notification", LC.alert(
+            "HIGH", "BACKUP PROBLEM: %s" % text.split(" (")[0],
+            summary="SYSTEM | BACKUP PROBLEM | %s | action: check the registry backup" % key.upper(),
+            **{"class": "RISK/SYSTEM ALERT", "event_time_et": LC.et(now), "why_sent": text}),
+            idem_key="backup-alert:%s:%s" % (key, day), now=now)
+    return probs
+
+
+def problems(registry, now, cfg, root, offsite=None):
+    """Backup problems as (reason_key, text), without queuing anything (also used by the preflight)."""
     probs = []
     att = _attempts(registry)
     oks = [a for a in att if a.get("ok")]
@@ -216,13 +229,6 @@ def health(registry, now, cfg, root, offsite=None):
     elif off.get("state") != "OK" and grace_over:           # missing copies are excused only during the start-up grace
         probs.append(("offsite", "off-site copy of the registry is %s (limit %d days)" % (
             off.get("state", "UNKNOWN").lower(), cfg["offsite_max_age_days"])))
-    day = now.astimezone(NY).date().isoformat()
-    for key, text in probs:
-        registry.append("notification", LC.alert(
-            "HIGH", "BACKUP PROBLEM: %s" % text.split(" (")[0],
-            summary="SYSTEM | BACKUP PROBLEM | %s | action: check the registry backup" % key.upper(),
-            **{"class": "RISK/SYSTEM ALERT", "event_time_et": LC.et(now), "why_sent": text}),
-            idem_key="backup-alert:%s:%s" % (key, day), now=now)
     return probs
 
 

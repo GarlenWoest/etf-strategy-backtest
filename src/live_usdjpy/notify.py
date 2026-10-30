@@ -180,23 +180,74 @@ def deliveries(registry, notif_id):
     return [r["payload"] for r in registry.records("delivery") if r["payload"]["notification_id"] == notif_id]
 
 
+HANDLED = ("routed_to_digest", "expired_unsent")             # policy decisions (Phase E): final, not a phone delivery
+
+
 def status_of(registry, notif_id):
+    """Internal state: "delivered" = a provider accepted it (or the owner confirmed it), "digest" / "expired" = the
+    notification policy kept it off the phone, "pending" otherwise. See provider_status() for the owner-facing label."""
     ds = deliveries(registry, notif_id)
-    if any(d["result"] == "sent" for d in ds):
+    if any(d["result"] in ("sent", "delivered_confirmed_by_owner", "acknowledged") for d in ds):
         return "delivered"
+    if any(d["result"] == "routed_to_digest" for d in ds):
+        return "digest"
+    if any(d["result"] == "expired_unsent" for d in ds):
+        return "expired"
     return "pending"
+
+
+PROVIDER_LABEL = ("QUEUED", "ACCEPTED BY PROVIDER", "DELIVERED (owner-confirmed)", "ACKNOWLEDGED", "FAILED",
+                  "LOGGED FOR DIGEST", "EXPIRED UNSENT", "UNKNOWN (interrupted)")
+
+
+def provider_status(registry, notif_id, ds=None):
+    """Owner-facing status. HTTP 200 from a provider is only ACCEPTED BY PROVIDER: it does not prove the phone
+    showed it or that anyone saw it. DELIVERED needs the owner's confirmation; ACKNOWLEDGED needs a Pushover
+    emergency-priority receipt (HIGH alerts only)."""
+    ds = deliveries(registry, notif_id) if ds is None else ds
+    res = [d["result"] for d in ds]
+    if "acknowledged" in res:
+        return "ACKNOWLEDGED"
+    if "delivered_confirmed_by_owner" in res:
+        return "DELIVERED (owner-confirmed)"
+    if "sent" in res:
+        return "ACCEPTED BY PROVIDER"
+    if "routed_to_digest" in res:
+        return "LOGGED FOR DIGEST"
+    if "expired_unsent" in res:
+        return "EXPIRED UNSENT"
+    if any(r in ("failed", "rejected") for r in res):
+        return "FAILED"
+    if "unknown" in res:
+        return "UNKNOWN (interrupted)"
+    return "QUEUED"
 
 
 def dispatch(registry, now, channels, cfg):
     """Send every undelivered notification that is due. `channels`: ordered list [primary, fallback, ...] of adapters.
     Returns a list of (notification_id, outcome)."""
+    from . import alerts as AL
     out = []
     quiet = in_quiet_hours(now, cfg)
-    for rec in registry.records("notification"):
+    notifs = registry.records("notification")
+    titles = {r["record_id"]: r["payload"].get("title") for r in notifs}
+    delivered_today = [(datetime.fromisoformat(d["payload"]["at_utc"]), titles.get(d["payload"]["notification_id"]))
+                       for d in registry.records("delivery") if d["payload"]["result"] == "sent" and d["payload"].get("at_utc")
+                       and registry_priority(notifs, d["payload"]["notification_id"]) != "HIGH"]
+    for rec in notifs:
         p, nid = rec["payload"], rec["record_id"]
-        if status_of(registry, nid) == "delivered":
+        if status_of(registry, nid) != "pending":
             continue
         high = p.get("priority") == "HIGH" or (p.get("fields") or {}).get("class") == "RISK/SYSTEM ALERT"
+        if cfg.get("policy"):
+            dest, why = AL.route(registry, rec, now, cfg["policy"], delivered_today)
+            if dest != "phone":
+                res = "routed_to_digest" if dest == "digest" else "expired_unsent"
+                registry.append("delivery", {"notification_id": nid, "channel": "policy", "attempt_id": "%s-policy" % nid,
+                                             "result": res, "info": why, "at_utc": now.isoformat()},
+                                idem_key="delivery:%s:policy" % nid, now=now)
+                out.append((nid, "%s (%s)" % (res, why)))
+                continue
         if quiet and not high:
             out.append((nid, "held (quiet hours)"))
             continue
@@ -212,7 +263,12 @@ def dispatch(registry, now, channels, cfg):
             continue
         if any(d["result"] == "unknown" for d in ds) and not high:
             continue
-        title, body = render(p)
+        if cfg.get("policy"):
+            sid = (p.get("fields") or {}).get("setup_id")
+            tk = AL.latest_ticket(registry, sid) if sid and sid not in ("UNKNOWN",) else None
+            title, body = AL.phone_text(p, "%s v%d" % (sid, tk["version"]) if tk else None)
+        else:
+            title, body = render(p)
         sent = False
         for i, ch in enumerate(channels):
             if not ch.configured():
@@ -237,6 +293,8 @@ def dispatch(registry, now, channels, cfg):
             out.append((nid, "%s %s" % (ch.name, res["result"])))
             if res["result"] == "sent":
                 sent = True
+                if not high:
+                    delivered_today.append((now, p.get("title")))
                 break
             if i == 0 and res["result"] == "failed" and len(mine) + 1 < cfg["fallback_after_failed_primary"]:
                 break                                          # retry the primary later before using the fallback
@@ -245,27 +303,66 @@ def dispatch(registry, now, channels, cfg):
     return out
 
 
+def registry_priority(notifs, nid):
+    for r in notifs:
+        if r["record_id"] == nid:
+            return r["payload"].get("priority")
+    return None
+
+
 # ---------------------------------------------------------------- liveness: digest, gaps
 
 def queue_digest(registry, now, cfg, snapshot=None, extra=None, positions=None):
-    """Once per New York day at/after digest time: LOW 'system alive' message."""
+    """Once per New York day at/after digest time: a short LOW 'system status' message (Phase E format).
+    Operating status, data currency, new setups, paper positions, what needs attention, what was logged without a
+    phone alert. It is never a trading signal."""
     ny = now.astimezone(NY)
     if (ny.hour, ny.minute) < _hm(cfg["digest_time_et"]):
         return False
+    day = ny.date().isoformat()
+    today = lambda ts: LC.et(ts).startswith(day)
     runs = registry.records("scan_run")
     last = runs[-1]["payload"]["completed_utc"] if runs else None
-    fresh = {o["specialist"]: "%s (%s)" % (o.get("freshness"), LC.et(o.get("source_ts_utc")))
-             for o in (snapshot or {}).get("observations", []) if o.get("role") == "primary"}
-    opens = LC.open_setups(registry)
-    day = ny.date().isoformat()
-    sent_today = [r for r in registry.records("notification") if LC.et(r["created_utc"]).startswith(day)]
-    body = ("System alive. Last successful scan: %s. Data freshness: %s. Open setups: %s. Open paper positions: %s. "
-            "Alerts queued today: %d.%s" % (
-                LC.et(last), "; ".join("%s %s" % kv for kv in fresh.items()) or "UNKNOWN",
-                ", ".join("%s %s" % (k, v["state"]) for k, v in opens.items()) or "none",
-                positions if positions is not None else "UNKNOWN", len(sent_today), " " + extra if extra else ""))
+    pfs = registry.records("preflight")
+    pf = pfs[-1]["payload"] if pfs else None
+    if pf:
+        bad = [c for c in pf["checks"] if c["status"] in ("DEGRADED", "BLOCKED")]
+        system = "%s%s" % (pf["verdict"], ": " + "; ".join("%s %s" % (c["check"], c["status"]) for c in bad) if bad else "")
+    else:
+        system = "UNKNOWN (no preflight recorded)"
+    names = {"usdjpy": "USD/JPY", "gold": "Gold", "gbpusd": "GBP/USD"}
+    data = " | ".join("%s %s %s" % (names.get(o["specialist"], o["specialist"]), o.get("freshness", "UNKNOWN"),
+                                      LC.et(o.get("source_ts_utc"))[11:] if o.get("source_ts_utc") else "")
+                      for o in (snapshot or {}).get("observations", []) if o.get("role") == "primary") or "UNKNOWN"
+    new = []
+    for r in registry.records("setup_transition"):
+        if today(r["created_utc"]) and r["payload"]["state"] in ("triggered", "blocked", "entered", "exited", "invalidated"):
+            new.append("%s %s" % (r["payload"]["setup_id"], r["payload"]["state"].upper()))
+    notifs = {r["record_id"]: r["payload"] for r in registry.records("notification")}
+    dl = registry.records("delivery")
+    logged = [notifs.get(d["payload"]["notification_id"], {}).get("title", "?") for d in dl
+              if d["payload"]["result"] in ("routed_to_digest", "expired_unsent") and today(d["created_utc"])]
+    failed = sorted({d["payload"]["notification_id"] for d in dl if d["payload"]["result"] in ("failed", "rejected", "unknown")
+                     and today(d["created_utc"])} - {d["payload"]["notification_id"] for d in dl if d["payload"]["result"] == "sent"})
+    attention = []
+    if pf and pf["verdict"] != "READY":
+        attention.append("preflight %s" % pf["verdict"])
+    if failed:
+        attention.append("%d notification(s) not delivered" % len(failed))
+    if extra and "no verified snapshot" in extra:
+        attention.append("backup")
+    lines = ["System: %s. Last scan %s." % (system, LC.et(last)),
+             "Data: %s." % data,
+             "New setups today: %s." % (", ".join(new) or "none"),
+             "Paper positions: %s." % (positions if positions is not None else "UNKNOWN"),
+             "Attention: %s." % (", ".join(attention) or "nothing"),
+             "Logged without phone alert today: %s." % ("%d (%s)" % (len(logged), "; ".join(t[:50] for t in logged[:3]) + ("; ..." if len(logged) > 3 else ""))
+                                                        if logged else "none")]
+    if extra:
+        lines.append(extra)
+    lines.append("Status only. NOT A TRADING SIGNAL.")
     r = registry.append("notification", {"status": "queued", "priority": "LOW", "title": "Daily digest %s" % day,
-                                         "body": body, "kind": "digest", "ny_date": day}, idem_key="digest:%s" % day, now=now)
+                                         "body": "\n".join(lines), "kind": "digest", "ny_date": day}, idem_key="digest:%s" % day, now=now)
     return not r["duplicate"]
 
 

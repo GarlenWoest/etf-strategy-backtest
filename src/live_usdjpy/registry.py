@@ -26,7 +26,7 @@ from pathlib import Path
 
 KINDS = ("scan_run", "market_state", "evaluation", "setup_transition", "risk_state", "order_event", "fill",
          "position_snapshot", "reconciliation", "outcome", "notification", "kill_switch", "preregistration", "note",
-         "market_watch", "delivery", "backup")
+         "market_watch", "delivery", "backup", "preflight", "ticket")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS records (

@@ -45,6 +45,8 @@ class ScanInputs:
     mode: str = "forward"                  # "forward" or "demo"
     rates: dict = field(default_factory=dict)   # {"usd": (annual rate or None, info), "jpy": (...)} for financing
     fx_prefiltered: bool = False                 # True for OANDA candles: already complete-only (v0.3)
+    blocks: tuple = ()                           # Phase D preflight: capabilities that fail closed this scan
+    block_reasons: dict = field(default_factory=dict)   # capability -> [reasons]
 
 
 def completed(series, kind, now):
@@ -156,7 +158,7 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
     hol = holidays_for({now.year - 1, now.year})
     view = G.MarketView(now=now, price_freshness=uj.get("freshness", "UNAVAILABLE"), price_age_s=uj.get("age_s") or -1,
                         specialist_status=(inp.snapshot.get("status") or {}).get("usdjpy", "UNKNOWN"), events=events,
-                        mof_intervention_recent=None)
+                        mof_intervention_recent=None, preflight=list(inp.block_reasons.get("paper_entries", [])))
     summary = {"mode": inp.mode, "evaluations": [], "transitions": [], "gate": [], "watch": 0}
     with registry.transaction():
         state_rec = {"label": "DEMO" if inp.mode == "demo" else "FORWARD", "snapshot_generated_utc": inp.snapshot.get("generated_utc"),
@@ -176,16 +178,31 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
         kill_on = G.kill_flag_path(base_dir).exists()
         slot_s = slot.strftime("%Y%m%dT%H%MZ")
         evals = []                                                   # (rule, signal, detected_late)
-        for rid, d in eval_plan(registry, inp.mode, fx, cfg):
+        plan_ = eval_plan(registry, inp.mode, fx, cfg)
+        if "rule_evaluation" in inp.blocks:                          # fail closed: evaluate later (catch-up), never NO TRADE
+            summary["deferred_evaluation"] = {"pairs": [(r_, str(d_)) for r_, d_ in plan_],
+                                              "why": inp.block_reasons.get("rule_evaluation", [])}
+            plan_ = []
+        for rid, d in plan_:
             fx_d = fx.loc[:pd.Timestamp(d)] if fx is not None else pd.Series(dtype=float)
             spy_d = spy.loc[:pd.Timestamp(d)] if spy is not None else pd.Series(dtype=float)
             sig = RL.RULES[rid](RL.RuleInputs(fx=fx_d, spy=spy_d, live_price=uj.get("last"), events=events, holidays=hol), rules_cfg[rid])
             done_at = datetime.combine(d, time(17, 0), tzinfo=NY)
             evals.append((rid, sig, (now - done_at) > timedelta(minutes=cfg.get("late_detection_minutes", 30))))
         S_mark = uj.get("last")
+        monitor_ok = "position_monitoring" not in inp.blocks          # a stale or invalid price never drives an exit
+        if not monitor_ok:
+            summary["position_monitoring"] = "BLOCKED: " + "; ".join(inp.block_reasons.get("position_monitoring", []))
+            open_pos = [r_ for r_ in rules_cfg if PP.state(registry, r_, cfg)["position"]]
+            if open_pos:
+                registry.append("notification", LC.alert(
+                    "HIGH", "PAPER POSITION UNMONITORED: %s" % ", ".join(open_pos),
+                    **{"class": "RISK/SYSTEM ALERT", "market": "USDJPY", "event_time_et": LC.et(now),
+                       "why_sent": "no valid live price, so exits cannot be checked: %s" % summary["position_monitoring"]}),
+                    idem_key="unmonitored:%s" % now.astimezone(NY).date().isoformat(), now=now)
         f2m = [s_ for r_, s_, _ in evals if r_ == "F002" and s_.kind in ("CANDIDATE", "NO_TRADE") and s_.setup_id]
         new_f002_bar = f2m[-1].bar_date if f2m else None
-        ledger_risk = PP.manage(registry, cfg, now, S_mark, inp.rates, slot_s, new_f002_bar) if S_mark else {}
+        ledger_risk = PP.manage(registry, cfg, now, S_mark, inp.rates, slot_s, new_f002_bar) if S_mark and monitor_ok else {}
         summary["paper"] = {r: v[0] for r, v in ledger_risk.items()}
         for rid, (st_, info) in ledger_risk.items():
             if st_ == "HALTED" and (G.current_state(registry, rid) or {}).get("state") != "HALTED":
@@ -242,6 +259,8 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                               {"setup_id": sid, "market": "USDJPY", "class": "EXPERIMENTAL IDEA (shadow ledger)"}, now)
                 summary["transitions"].append((sid, "expired"))
                 continue
+            if not monitor_ok:                                       # no valid price: no invalidation, no entry this scan
+                continue
             px = uj.get("last")
             if px and (sig["direction"] == 1 and px <= sig["invalidation"] or sig["direction"] == -1 and px >= sig["invalidation"]):
                 LC.transition(registry, sid, "invalidated", {"reason": "price %.3f beyond invalidation %.3f before entry" % (px, sig["invalidation"])},
@@ -279,6 +298,7 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                               {"setup_id": sid, "market": "USDJPY", "class": "EXPERIMENTAL IDEA (shadow ledger)",
                                "trigger": "; ".join(d.reasons)}, now)
                 summary["transitions"].append((sid, "blocked"))
+        summary["tickets"] = tickets_for_changed_setups(registry, cfg, now)
         summary["watch"] = sum(1 for x in W.run(registry, now, watch_bars, inp.snapshot, inp.events_store, cfg["market_watch"]) if x)
         if S_mark:
             ok, _ = PP.reconcile(registry, cfg, now, S_mark)
@@ -287,3 +307,21 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                                      "summary": summary, "state": (G.current_state(registry) or {}).get("state", "ACTIVE"), "kill_switch": kill_on},
                         idem_key=key, now=now)
     return summary
+
+
+def tickets_for_changed_setups(registry, cfg, now):
+    """Phase E: a new copy-ready ticket version for every setup that reached triggered or later and whose state changed
+    in this scan (all of this scan's records share `now`)."""
+    from . import alerts as AL
+    stamp = now.astimezone(timezone.utc).isoformat(timespec="microseconds")
+    changed = sorted({r["payload"]["setup_id"] for r in registry.records("setup_transition") if r["created_utc"] == stamp})
+    out = []
+    for sid in changed:
+        states = [r["payload"]["state"] for r in registry.records("setup_transition") if r["payload"]["setup_id"] == sid]
+        if "triggered" not in states:
+            continue
+        text, fields = AL.build_ticket(registry, cfg, sid, EVIDENCE, now)
+        v, new = AL.record_ticket(registry, sid, text, fields, now)
+        if new:
+            out.append("%s v%d" % (sid, v))
+    return out

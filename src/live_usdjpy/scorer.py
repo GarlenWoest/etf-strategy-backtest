@@ -240,7 +240,9 @@ def status_page(registry, cfg, now, snapshot=None, base_dir=None, mode="forward"
     if not by:
         L.append("| none yet | | | |")
     watch = registry.records("market_watch")
-    L += ["", "MARKET WATCH triggers recorded: %d (alerted %d)." % (len(watch), sum(1 for w in watch if w["payload"].get("alerted"))), "",
+    L += ["", "MARKET WATCH triggers recorded: %d (alerted %d)." % (len(watch), sum(1 for w in watch if w["payload"].get("alerted"))), ""]
+    L += readiness_section(registry) + tickets_section(registry) + notifications_section(registry, notifs, dl)
+    L += [
           "## Scorecard (forward test; shadow; indicative prices; costs and financing estimated, unverified)", ""]
     for rule, r in rows.items():
         L += ["**%s** (%s; rules v%s: pre-registration v0.2 with the v0.3 source amendment)" % (
@@ -256,3 +258,51 @@ def status_page(registry, cfg, now, snapshot=None, base_dir=None, mode="forward"
                   fmt(r["baseline_means"][k]) for k in ("cash", "always_long", "historical_sample_mean", "simple_trend", "placebo_F001")),
               "| Statistics | %s |" % r["statistics"], "| Calibration | %s |" % r["calibration"], ""]
     return "\n".join(L) + "\n"
+
+
+def readiness_section(registry):
+    """Phase D: the latest preflight verdict with every check (operating readiness, not a market view)."""
+    pfs = registry.records("preflight")
+    L = ["## Readiness (preflight before each scan; operating status only, not a market view)", ""]
+    if not pfs:
+        return L + ["No preflight recorded yet.", ""]
+    pf = pfs[-1]["payload"]
+    L += ["**%s** at %s%s" % (pf["verdict"], LC.et(pf["at_utc"]), " · fail-closed: %s" % ", ".join(pf["blocks"]) if pf["blocks"] else ""), "",
+          "| Check | Status | Detail |", "|---|---|---|"]
+    L += ["| %s | %s | %s |" % (c["check"], c["status"], str(c["detail"]).replace("|", "/")) for c in pf["checks"]]
+    return L + [""]
+
+
+def tickets_section(registry):
+    """Phase E: the latest copy-ready ticket for each setup (newest first), plus the version history."""
+    tk = [r for r in registry.records("ticket")]
+    L = ["## Trade tickets (copy-ready; WATCH ONLY; no real-money trading is authorized)", ""]
+    if not tk:
+        return L + ["No setup has triggered yet, so there are no tickets.", ""]
+    latest = {}
+    for r in tk:
+        latest[r["payload"]["setup_id"]] = r
+    for sid, r in sorted(latest.items(), key=lambda kv: kv[1]["created_utc"], reverse=True)[:5]:
+        L += ["**%s v%d** (%s)" % (sid, r["payload"]["version"], LC.et(r["created_utc"])), "", "```text", r["payload"]["text"], "```", ""]
+    L += ["| Ticket | Version | State | Recorded | Content SHA-256 |", "|---|---|---|---|---|"]
+    L += ["| %s | %d | %s | %s | %s… |" % (r["payload"]["setup_id"], r["payload"]["version"], r["payload"]["state"],
+                                          LC.et(r["created_utc"]), r["payload"]["content_sha256"][:12]) for r in tk[-20:]]
+    return L + [""]
+
+
+def notifications_section(registry, notifs, dl):
+    """Last 15 notifications with their owner-facing status (HTTP 200 = ACCEPTED BY PROVIDER, not seen)."""
+    from . import notify as N
+    by = {}
+    for d in dl:
+        by.setdefault(d["payload"]["notification_id"], []).append(d["payload"])
+    L = ["## Notifications (latest 15)", "",
+         "ACCEPTED BY PROVIDER means Pushover or ntfy accepted the request; it does not prove the phone showed it. "
+         "DELIVERED needs your confirmation; ACKNOWLEDGED needs a Pushover emergency receipt (HIGH alerts only).", "",
+         "| Queued | Priority | Title | Status | Channel |", "|---|---|---|---|---|"]
+    for n in notifs[-15:][::-1]:
+        ds = by.get(n["record_id"], [])
+        ch = ", ".join(sorted({d["channel"] for d in ds if d["result"] == "sent"})) or "—"
+        L.append("| %s | %s | %s | %s | %s |" % (LC.et(n["created_utc"]), n["payload"].get("priority"),
+                                                 str(n["payload"].get("title", ""))[:70].replace("|", "/"), N.provider_status(registry, n["record_id"], ds), ch))
+    return L + [""]

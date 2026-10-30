@@ -12,6 +12,8 @@
   score                       score closed paper positions (once each) and write the status page
                               live/usdjpy/STATUS.md (STATUS_DEMO.md with --demo)
   verify                      check the registry hash chain
+  preflight                   readiness check now (READY / DEGRADED / BLOCKED with reasons); dry run, records nothing
+  ticket SETUP_ID [--version N]   print a setup's copy-ready trade ticket (latest or a given version)
   backup snapshot|push|restore-test [--source published|local-git|offsite]|status
                               forward-registry snapshot (SQLite backup API, verified), restore test into tmp/, status
   status                      one-line state summary
@@ -149,10 +151,28 @@ def run(demo=False):
             events = json.loads(ev_p.read_text()) if ev_p.exists() else events
             done.append("events poll exit %d%s" % (r.returncode, "" if bls else " (BLS contact not configured: BLS skipped)"))
         if "scan" in tasks:
-            bars, snap = fetch_v03(now)
+            from src.live_usdjpy import preflight as PF
+            fetch_error = None
+            try:
+                bars, snap = fetch_v03(now)
+            except Exception as ex:                                  # fail closed below; observation and reporting go on
+                bars, snap, fetch_error = None, None, "%s: %s" % (type(ex).__name__, str(ex)[:160])
             rates = fetch_rates(now, st)
+            pf = PF.check(now, reg, snap, bars, events, st, CFG["preflight"], fetch_error=fetch_error,
+                          kill_on=G.kill_flag_path(BASE).exists(),
+                          backup_problems=[] if demo else BK.problems(reg, now, CFG["backup"], ROOT),
+                          channels_configured=any(ch.configured() for ch in channels))
+            PF.record(reg, now, pf, CFG["preflight"], "%s:%s" % (mode, now.strftime("%Y%m%dT%H%M")))
+            done.append("preflight %s" % PF.summary(pf)[:300])
+            st["last_preflight"] = {"verdict": pf["verdict"], "at_utc": pf["at_utc"], "summary": PF.summary(pf)[:600]}
+        if "scan" in tasks and bars is not None:
+            reasons = {}
+            for c_ in pf["checks"]:
+                for b_ in c_["blocks"]:
+                    reasons.setdefault(b_, []).append("%s: %s" % (c_["check"], c_["detail"]))
             out = S.run_scan(reg, now, S.ScanInputs(snapshot=snap, bars=bars, events_store=events, mode=mode,
-                                                    rates=rates, fx_prefiltered=True), CFG, BASE)
+                                                    rates=rates, fx_prefiltered=True, blocks=tuple(pf["blocks"]),
+                                                    block_reasons=reasons), CFG, BASE)
             st["last_scan_utc"] = now.isoformat()
             ujb = S.completed(bars.get("USD_JPY"), "complete", now)
             st["last_bar_seen"] = ujb.index[-1].date().isoformat() if ujb is not None and len(ujb) else st.get("last_bar_seen")
@@ -163,7 +183,8 @@ def run(demo=False):
             sys.path.insert(0, str(ROOT / "tools"))
             from atomic_io import write_text
             write_text(BASE / ("STATUS_DEMO.md" if demo else "STATUS.md"), SC.status_page(reg, CFG, now, snap, BASE, mode))
-            done.append("scan %s" % json.dumps({k: out.get(k) for k in ("evaluations", "transitions", "gate", "watch", "reconciled", "duplicate")}, default=str))
+            done.append("scan %s" % json.dumps({k: out.get(k) for k in ("evaluations", "transitions", "gate", "watch", "reconciled", "duplicate",
+                                                                      "deferred_evaluation", "position_monitoring", "tickets") if k in out}, default=str))
         if not demo:                                                # forward registry only: verified snapshot once a day
             bcfg = CFG["backup"]
             if BK.due(reg, now, bcfg):
@@ -191,6 +212,7 @@ def run(demo=False):
             sent += N.dispatch(reg, now, channels, ncfg)           # deliver any liveness alert raised just now
         done.append("notify %d action(s)" % len(sent))
         st["last_run_utc"] = now.isoformat()
+        st.pop("last_error", None)
         save_state(st, demo)
         print("RUN OK %s | %s | %s" % (now.isoformat(timespec="seconds"), "; ".join(why) or "notify only", "; ".join(done)))
     except Exception as ex:
@@ -203,6 +225,7 @@ def run(demo=False):
         except Exception:
             pass
         st["last_run_utc"] = now.isoformat()
+        st["last_error"] = msg
         save_state(st, demo)
         print("RUN ERROR %s | %s" % (now.isoformat(timespec="seconds"), msg))
         sys.exit(1)
@@ -293,6 +316,32 @@ def main(a):
         print("STATE %s | kill switch %s | scans %d | last scan %s | records %d" % (
             st["state"], "ON" if G.kill_flag_path(BASE).exists() else "off", len(runs),
             runs[-1]["payload"]["completed_utc"] if runs else "none", reg.count()))
+        reg.close()
+    elif cmd == "preflight":                        # dry run: fetch, check, print; records nothing
+        from src.live_usdjpy import preflight as PF
+        now = datetime.now(timezone.utc)
+        reg = registry(demo)
+        ev_p = ROOT / "live" / "events" / "events.json"
+        events = json.loads(ev_p.read_text()) if ev_p.exists() else {}
+        err = None
+        try:
+            bars, snap = fetch_v03(now)
+        except Exception as ex:
+            bars, snap, err = None, None, "%s: %s" % (type(ex).__name__, str(ex)[:160])
+        pf = PF.check(now, reg, snap, bars, events, load_state(demo), CFG["preflight"], fetch_error=err,
+                      kill_on=G.kill_flag_path(BASE).exists(), backup_problems=BK.problems(reg, now, CFG["backup"], ROOT))
+        for c_ in pf["checks"]:
+            print("%-9s %-20s %s" % (c_["status"], c_["check"], c_["detail"]))
+        print("PREFLIGHT %s" % PF.summary(pf))
+        reg.close()
+    elif cmd == "ticket":                           # print the latest (or --version n) copy-ready ticket of a setup
+        from src.live_usdjpy import alerts as AL
+        reg = registry(demo)
+        sid = a[2] if len(a) > 2 else ""
+        tk = [r["payload"] for r in reg.records("ticket") if r["payload"]["setup_id"] == sid]
+        if "--version" in a:
+            tk = [t for t in tk if t["version"] == int(a[a.index("--version") + 1])]
+        print(tk[-1]["text"] if tk else "no ticket for %r (tickets exist once a setup triggers)" % sid)
         reg.close()
     elif cmd == "backup":
         sub = a[2] if len(a) > 2 else "status"

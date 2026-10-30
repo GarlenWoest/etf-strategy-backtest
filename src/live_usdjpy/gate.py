@@ -50,6 +50,7 @@ class MarketView:
     specialist_status: str             # DATA OK / STALE MARKET DATA / INSUFFICIENT DATA
     events: list = field(default_factory=list)          # event-monitor records
     mof_intervention_recent: object = None              # True / False / None (= UNKNOWN)
+    preflight: list = field(default_factory=list)       # Phase D: reasons a required input is missing (fail closed)
 
 
 @dataclass
@@ -98,7 +99,7 @@ def blackout_reasons(view, lim):
 
 def eligibility(c, view, cfg, approved_paper_rules=()):
     """All eligibility reasons (empty list = eligible)."""
-    r = []
+    r = ["OPERATIONAL preflight BLOCKED: %s" % x for x in getattr(view, "preflight", [])]
     if c.instrument not in ALLOWED_PAPER_INSTRUMENTS:
         r.append("OPERATIONAL invalid instrument %s: only %s is eligible for paper workflows" % (c.instrument, ALLOWED_PAPER_INSTRUMENTS))
     if c.mode == "approved_paper" and c.rule_id not in approved_paper_rules:

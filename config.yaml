@@ -342,6 +342,10 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     retry_backoff_minutes: [1, 5, 15, 60]
     max_attempts_per_channel: 5
     fallback_after_failed_primary: 2
+    policy:                                   # Phase E notification policy (src/live_usdjpy/alerts.py): phone vs digest
+      max_phone_alerts_per_day: 6             # non-HIGH phone alerts per New York day; more go to the digest (HIGH never capped)
+      dedup_hours: 6                          # the same title already sent within this window goes to the digest
+      expire_unsent_hours: 12                 # a non-HIGH alert not sendable within this time is never pushed stale
     pushover: {priority: {HIGH: 2, NORMAL: 0, LOW: -1}, emergency_retry_s: 300, emergency_expire_s: 3600,
                credentials: "macOS Keychain items 'trading-research-pushover-token' and 'trading-research-pushover-user' (owner sets them; never in files, logs or git)"}
     ntfy: {server: "https://ntfy.sh", priority: {HIGH: 5, NORMAL: 3, LOW: 2},

@@ -100,7 +100,7 @@ def test_quiet_hours_hold_low_and_normal_but_never_high_or_system(reg):
     queue(reg, "NORMAL", cls="RISK/SYSTEM ALERT", now=night)
     p = Fake("pushover")
     N.dispatch(reg, night, [p], CFG)
-    assert sorted(t for t, _ in p.sent) == ["T HIGH", "T NORMAL"] and any("RISK/SYSTEM" in b for _, b in p.sent)
+    assert sorted(b.splitlines()[0] for _, b in p.sent) == ["T HIGH", "T NORMAL"] and any(t == "SYSTEM ALERT" for t, _ in p.sent)
     N.dispatch(reg, datetime(2026, 11, 11, 12, 30, tzinfo=timezone.utc), [p], CFG)   # 07:30 ET: held ones go out
     assert len(p.sent) == 4
 
@@ -112,7 +112,7 @@ def test_crash_between_send_and_record_never_resends_normal_but_resends_high(reg
                                 "result": "attempting", "at_utc": DAY.isoformat()})
     p = Fake("pushover")
     N.dispatch(reg, DAY + timedelta(minutes=10), [p], CFG)
-    assert [t for t, _ in p.sent] == ["T HIGH"]
+    assert [b.splitlines()[0] for _, b in p.sent] == ["T HIGH"]
     assert any(d["result"] == "unknown" for d in N.deliveries(reg, a["record_id"]))
 
 
@@ -128,7 +128,7 @@ def test_K_kill_switch_alert_is_high_and_delivered_even_in_quiet_hours(reg, tmp_
     G.kill(reg, tmp_path, "drill", now=night)
     p = Fake("pushover")
     N.dispatch(reg, night, [p], CFG)
-    assert len(p.sent) == 1 and p.sent[0][0].startswith("KILL SWITCH ON")
+    assert len(p.sent) == 1 and p.sent[0][0] == "SYSTEM ALERT" and p.sent[0][1].startswith("KILL SWITCH ON")
 
 
 def test_daily_digest_once_per_day(reg):
@@ -138,7 +138,7 @@ def test_daily_digest_once_per_day(reg):
     assert N.queue_digest(reg, eve + timedelta(minutes=30), CFG) is False   # once per day
     p = Fake("pushover")
     N.dispatch(reg, eve, [p], CFG)
-    assert p.sent and p.sent[0][0] == "Daily digest 2026-11-10" and "System alive" in p.sent[0][1]
+    assert p.sent and p.sent[0][0] == "Daily digest 2026-11-10" and "NOT A TRADING SIGNAL" in p.sent[0][1]
 
 
 def test_L_missing_digest_and_scan_gap_raise_high_alerts_once(reg):
