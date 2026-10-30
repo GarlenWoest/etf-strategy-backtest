@@ -57,3 +57,15 @@ def test_gap_record_only_after_more_than_25_minutes():
 
 def test_last_bar_completion_skips_weekends():
     assert RN.last_bar_completion(datetime(2026, 11, 1, 18, 0, tzinfo=U)).isoformat().startswith("2026-10-30T17:00")
+
+
+def test_keeps_scanning_until_the_new_daily_bar_is_actually_seen():
+    """2026-10-30: if the 17:02 scan ran before the venue flagged the candle complete, the old plan considered the
+    bar covered and (with FX closed on Friday evening) would not scan again until Sunday."""
+    fri = datetime(2026, 10, 30, 21, 17, tzinfo=timezone.utc)            # Fri 17:17 ET, FX closed
+    st = {"last_scan_utc": datetime(2026, 10, 30, 21, 2, tzinfo=timezone.utc).isoformat(), "last_bar_seen": "2026-10-29"}
+    tasks, why = RN.plan(fri, st, False, [])
+    assert "scan" in tasks and any("waiting for the 2026-10-30 daily bar" in w for w in why)
+    assert "scan" not in RN.plan(fri, dict(st, last_bar_seen="2026-10-30"), False, [])[0]
+    assert "scan" not in RN.plan(fri + timedelta(hours=7), st, False, [])[0]          # gives up after 6 h
+    assert "scan" not in RN.plan(fri, {k: v for k, v in st.items() if k != "last_bar_seen"}, False, [])[0]  # old state

@@ -21,6 +21,7 @@ from src import clock as K
 NY = ZoneInfo("America/New_York")
 EVENT_POLL_TIMES = ((6, 0), (9, 0), (13, 0), (16, 40))
 GAP_MINUTES = 25
+BAR_WAIT = timedelta(hours=6)
 
 
 def last_bar_completion(now):
@@ -47,6 +48,9 @@ def plan(now, st, active_setups, todays_releases):
         tasks.add("scan"); why.append("first scan")
     elif comp and last_scan < comp:
         tasks.add("scan"); why.append("new daily bar completed %s" % comp.strftime("%a %H:%M ET"))
+    elif comp and st.get("last_bar_seen") and st["last_bar_seen"] < comp.date().isoformat() and now - comp < BAR_WAIT:
+        # the scan after 17:00 ran before the venue flagged the candle complete: keep scanning every run (up to BAR_WAIT)
+        tasks.add("scan"); why.append("waiting for the %s daily bar (last seen %s)" % (comp.date().isoformat(), st["last_bar_seen"]))
     elif fx_open and active_setups:
         tasks.add("scan"); why.append("open position or pending setup")
     elif fx_open and last_scan.astimezone(NY).replace(minute=0, second=0, microsecond=0) < n.replace(minute=0, second=0, microsecond=0):

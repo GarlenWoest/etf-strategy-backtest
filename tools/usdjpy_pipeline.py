@@ -154,6 +154,8 @@ def run(demo=False):
             out = S.run_scan(reg, now, S.ScanInputs(snapshot=snap, bars=bars, events_store=events, mode=mode,
                                                     rates=rates, fx_prefiltered=True), CFG, BASE)
             st["last_scan_utc"] = now.isoformat()
+            ujb = S.completed(bars.get("USD_JPY"), "complete", now)
+            st["last_bar_seen"] = ujb.index[-1].date().isoformat() if ujb is not None and len(ujb) else st.get("last_bar_seen")
             st["last_snapshot"] = {"generated_utc": snap.get("generated_utc"), "status": snap.get("status"),
                                    "observations": [{k: o.get(k) for k in ("specialist", "role", "freshness", "source_ts_utc")}
                                                     for o in snap.get("observations", [])]}
