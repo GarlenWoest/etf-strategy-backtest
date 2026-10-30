@@ -319,6 +319,11 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     regime_lookback: 250
     event_horizon_hours: 24         # W003
     markets: {USDJPY: "USD_JPY (OANDA practice)", GOLD: "GLD (Alpaca IEX)", GBPUSD: "GBP_USD (OANDA practice)"}   # labels; Yahoo symbols until 2026-10-30
+  official_release_alerts:          # owner request 2026-10-30: NORMAL, information only (source, title, time, link)
+    always_sources: ["Federal Reserve", "Bank of Japan"]
+    key_title_sources: ["US Bureau of Labor Statistics", "US Bureau of Economic Analysis"]
+    key_titles: ["Employment Situation", "Consumer Price Index", "Gross Domestic Product", "GDP", "Personal Income and Outlays"]
+    lookback_hours: 24                        # only publications detected in the last 24 h alert (no replay of history)
   entry_window_fx_days: {F001: 1, F002: 3}     # scans after detection during which a gate-blocked setup may still enter
   demo_registry: live/usdjpy/demo_registry.sqlite
   registry: live/usdjpy/registry.sqlite

@@ -174,6 +174,11 @@ def run(demo=False):
                     done.append("off-site push %s" % ("OK" if push["ok"] else "FAILED: %s" % push.get("result")))
             if BK.health(reg, now, bcfg, ROOT):
                 done.append("backup health problem alerted")
+        if not demo:
+            from src.live_usdjpy import releases as RLm
+            rel_new = RLm.queue(reg, now, events, CFG["official_release_alerts"])
+            if rel_new:
+                done.append("official release alerts %d" % len(rel_new))
         ncfg = CFG["notifications"]
         snap_for_digest = st.get("last_snapshot") or {}
         pos = [r_ for r_ in CFG["rules"] if PPm.state(reg, r_, CFG)["position"]]
