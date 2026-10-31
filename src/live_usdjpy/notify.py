@@ -328,8 +328,10 @@ def queue_digest(registry, now, cfg, snapshot=None, extra=None, positions=None):
     if pf:
         bad = [c for c in pf["checks"] if c["status"] in ("DEGRADED", "BLOCKED")]
         system = "%s%s" % (pf["verdict"], ": " + "; ".join("%s %s" % (c["check"], c["status"]) for c in bad) if bad else "")
+    elif runs:
+        system = "running; readiness not checked yet (no scan since the readiness check was installed)"
     else:
-        system = "UNKNOWN (no preflight recorded)"
+        system = "no scan recorded yet"
     names = {"usdjpy": "USD/JPY", "gold": "Gold", "gbpusd": "GBP/USD"}
     data = " | ".join("%s %s %s" % (names.get(o["specialist"], o["specialist"]), o.get("freshness", "UNKNOWN"),
                                       LC.et(o.get("source_ts_utc"))[11:] if o.get("source_ts_utc") else "")

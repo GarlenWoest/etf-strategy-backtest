@@ -201,3 +201,12 @@ def test_digest_queued_late_then_delivered_does_not_raise_a_false_missing_alert(
     N.dispatch(reg, late, [Fake("pushover")], CFG)
     assert N.check_liveness(reg, late, CFG, fx_open=True) == []
     assert not [r for r in reg.records("notification") if r["payload"]["priority"] == "HIGH"]
+
+
+def test_digest_says_plainly_when_no_readiness_check_has_run(reg):
+    """Owner request 2026-10-30: 'System: UNKNOWN (no preflight recorded)' replaced by plain wording."""
+    reg.append("scan_run", {"completed_utc": DAY.isoformat(), "mode": "forward"}, now=DAY)
+    t = DAY.replace(hour=23)                                                # 18:00 ET
+    N.queue_digest(reg, t, CFG)
+    body = reg.records("notification")[-1]["payload"]["body"]
+    assert body.startswith("System: running; readiness not checked yet") and "UNKNOWN" not in body.splitlines()[0]
