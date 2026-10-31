@@ -37,7 +37,8 @@ AUTH = {"EXPERIMENTAL SETUP": "WATCH ONLY. NOT VALIDATED. No real-money trade.",
         "OFFICIAL RELEASE": "INFORMATION ONLY. No interpretation.",
         "SYSTEM ALERT": "ACTION: check the system (see STATUS.md).",
         "TEST": "TEST. No action needed.", "DAILY DIGEST": "NOT A TRADING SIGNAL.",
-        "MONITORING STATUS": "Monitoring status only; observation continues. See STATUS.md."}
+        "MONITORING STATUS": "Monitoring status only; observation continues. See STATUS.md.",
+        "WEEKLY REVIEW": "Review only. NOT A TRADING SIGNAL."}
 PHONE_STATES = ("triggered", "blocked", "entered", "exited", "invalidated")
 DIGEST_STATES = ("watching", "expired", "resolved", "detected")
 NA = "NOT APPLICABLE"

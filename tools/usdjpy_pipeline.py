@@ -13,6 +13,7 @@
                               live/usdjpy/STATUS.md (STATUS_DEMO.md with --demo)
   verify                      check the registry hash chain
   preflight                   readiness check now (READY / DEGRADED / BLOCKED with reasons); dry run, records nothing
+  weekly-review [--date YYYY-MM-DD]   print the factual weekly review (also written automatically on Saturdays)
   ticket SETUP_ID [--version N]   print a setup's copy-ready trade ticket (latest or a given version)
   backup snapshot|push|restore-test [--source published|local-git|offsite]|status
                               forward-registry snapshot (SQLite backup API, verified), restore test into tmp/, status
@@ -202,6 +203,24 @@ def run(demo=False):
             rel_new = RLm.queue(reg, now, events, CFG["official_release_alerts"])
             if rel_new:
                 done.append("official release alerts %d" % len(rel_new))
+        if not demo:                                                # Phase H: weekly review, Saturday after 12:00 ET
+            from src.live_usdjpy import review as RV
+            wd = RV.due(st, now)
+            if wd:
+                wk, text = RV.build(reg, CFG, wd, now)
+                sys.path.insert(0, str(ROOT / "tools"))
+                from atomic_io import write_text
+                path = BASE / "reviews" / ("week_%s.md" % wk)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                write_text(path, text)
+                reg.append("note", {"type": "weekly_review", "week_of": wk, "file": str(path.relative_to(ROOT))},
+                           idem_key="weekly-review:%s" % wk, now=now)
+                reg.append("notification", LC.alert("NORMAL", "Weekly review ready: week of %s" % wk,
+                                                    **{"class": "WEEKLY REVIEW", "event_time_et": LC.et(now),
+                                                       "why_sent": "factual weekly review in %s; no trading signal" % path.relative_to(ROOT)}),
+                           idem_key="notif:weekly-review:%s" % wk, now=now)
+                st["last_weekly_review"] = wk
+                done.append("weekly review %s" % wk)
         ncfg = CFG["notifications"]
         snap_for_digest = st.get("last_snapshot") or {}
         pos = [r_ for r_ in CFG["rules"] if PPm.state(reg, r_, CFG)["position"]]
@@ -346,6 +365,14 @@ def main(a):
         if "--version" in a:
             tk = [t for t in tk if t["version"] == int(a[a.index("--version") + 1])]
         print(tk[-1]["text"] if tk else "no ticket for %r (tickets exist once a setup triggers)" % sid)
+        reg.close()
+    elif cmd == "weekly-review":                    # print (and with --write, store) the review of a week
+        from src.live_usdjpy import review as RV
+        from datetime import date as _date
+        reg = registry(demo)
+        d = _date.fromisoformat(a[a.index("--date") + 1]) if "--date" in a else datetime.now(RV.NY).date()
+        wk, text = RV.build(reg, CFG, d, datetime.now(timezone.utc))
+        print(text)
         reg.close()
     elif cmd == "backup":
         sub = a[2] if len(a) > 2 else "status"
