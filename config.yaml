@@ -339,6 +339,7 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     digest_time_et: "18:00"
     digest_grace_minutes: 120                 # no digest delivered by digest time + grace -> HIGH alert
     scan_gap_hours: 30                        # no successful scan for this long while the FX market is open -> HIGH alert
+    scan_gap_hours_with_position: 2           # Phase F: with a paper position open, a scan gap this long -> HIGH alert
     retry_backoff_minutes: [1, 5, 15, 60]
     max_attempts_per_channel: 5
     fallback_after_failed_primary: 2

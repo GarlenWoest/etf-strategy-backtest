@@ -188,9 +188,11 @@ def exit_position(registry, cfg, rule, S, now, slot, reason):
     return oid
 
 
-def manage(registry, cfg, now, S, rates, slot, new_f002_bar=None):
+def manage(registry, cfg, now, S, rates, slot, new_f002_bar=None, can_fill=True):
     """Each scan, per rule: accrue financing, mark, daily-loss/drawdown bookkeeping, scan-based exits.
-    Returns {rule: (state, info)} from gate.derive_state on the sub-ledger."""
+    `can_fill` False (FX market closed, or no LIVE price): an exit condition is recorded as EXIT PENDING with one alert
+    and filled at the first scan with a live price after the reopen (weekend gap taken as it comes), never at a price
+    nobody could trade. Returns {rule: (state, info)} from gate.derive_state on the sub-ledger."""
     from . import gate as G
     out = {}
     ny_date = now.astimezone(NY).date().isoformat()
@@ -220,6 +222,19 @@ def manage(registry, cfg, now, S, rates, slot, new_f002_bar=None):
         s_, info = G.derive_state(book, cfg["risk_limits"], None, False, now)
         if info["close_all"] and pos:
             reason = "risk limit: sub-ledger drawdown %.2f%% <= -5%%: close everything, experiment stopped" % (100 * info["drawdown"])
+        if pos and pos.get("exit_pending") and can_fill:          # the earlier decision stands (it came first)
+            reason = "%s (deferred while the market was closed; filled at the first live price)" % pos["exit_pending"]
+        if reason and not can_fill:
+            if not pos.get("exit_pending"):
+                st["position"] = dict(pos, exit_pending=reason)
+                snapshot(registry, st, now, "exit pending: no tradable price (market closed or price not LIVE)")
+                registry.append("notification", LC.alert(
+                    "NORMAL", "%s EXIT PENDING (market closed)" % pos["setup_id"],
+                    **{"class": "PAPER POSITION UPDATE", "market": "USDJPY", "setup_id": pos["setup_id"],
+                       "trigger": reason, "event_time_et": LC.et(now),
+                       "why_sent": "exit condition met while no tradable price exists; fills at the first live price after the reopen"}),
+                    idem_key="notif:exit-pending:%s" % pos["setup_id"], now=now)
+            reason = None
         if reason:
             exit_position(registry, cfg, rule, S, now, slot, reason)
         if info["experiment_stopped"]:

@@ -202,7 +202,8 @@ def run_scan(registry, now, inp, cfg, base_dir, slot=None):
                     idem_key="unmonitored:%s" % now.astimezone(NY).date().isoformat(), now=now)
         f2m = [s_ for r_, s_, _ in evals if r_ == "F002" and s_.kind in ("CANDIDATE", "NO_TRADE") and s_.setup_id]
         new_f002_bar = f2m[-1].bar_date if f2m else None
-        ledger_risk = PP.manage(registry, cfg, now, S_mark, inp.rates, slot_s, new_f002_bar) if S_mark and monitor_ok else {}
+        can_fill = K.fx_market_open(now) and uj.get("freshness") == "LIVE"
+        ledger_risk = PP.manage(registry, cfg, now, S_mark, inp.rates, slot_s, new_f002_bar, can_fill=can_fill) if S_mark and monitor_ok else {}
         summary["paper"] = {r: v[0] for r, v in ledger_risk.items()}
         for rid, (st_, info) in ledger_risk.items():
             if st_ == "HALTED" and (G.current_state(registry, rid) or {}).get("state") != "HALTED":

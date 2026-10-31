@@ -208,8 +208,12 @@ def run(demo=False):
         N.queue_digest(reg, now, ncfg, snap_for_digest, positions=", ".join(pos) or "none",
                        extra=None if demo else BK.summary_line(reg, now, CFG["backup"], ROOT))
         sent = N.dispatch(reg, now, channels, ncfg)                 # deliver first: a digest queued this run counts
-        if N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now)):
+        if N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now), position_open=bool(pos)):
             sent += N.dispatch(reg, now, channels, ncfg)           # deliver any liveness alert raised just now
+        if not demo:                                                # Pushover emergency receipts (HIGH alerts only)
+            rec_ = N.poll_receipts(reg, now, channels[0])
+            if rec_:
+                done.append("receipts %s" % ", ".join(r for _, r in rec_))
         done.append("notify %d action(s)" % len(sent))
         st["last_run_utc"] = now.isoformat()
         st.pop("last_error", None)

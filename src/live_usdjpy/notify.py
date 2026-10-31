@@ -139,6 +139,27 @@ class Pushover:
         return {"result": "failed", "http_status": st, "info": "server error"}
 
 
+    RECEIPT_URL = "https://api.pushover.net/1/receipts/%s.json"
+
+    def receipt(self, receipt_id, get=None):
+        """Pushover's official receipt for an EMERGENCY-priority (HIGH) message: whether it reached a device
+        (last_delivered_at), was acknowledged (acknowledged, acknowledged_at) or expired. Read-only GET; the token is
+        sent as a query parameter as Pushover documents and is never recorded."""
+        import re
+        import requests
+        if not re.fullmatch(r"[A-Za-z0-9]{20,40}", receipt_id or ""):
+            return {"error": "invalid receipt id"}
+        get = get or requests.get
+        try:
+            r = get(self.RECEIPT_URL % receipt_id, params={"token": secret("trading-research-pushover-token")}, timeout=20)
+        except Exception as ex:
+            return {"error": type(ex).__name__}
+        if r.status_code != 200:
+            return {"error": "HTTP %d" % r.status_code}
+        j = r.json()
+        return {k: j.get(k) for k in ("acknowledged", "acknowledged_at", "last_delivered_at", "expired", "expires_at", "called_back")}
+
+
 class Ntfy:
     name = "ntfy"
 
@@ -153,7 +174,8 @@ class Ntfy:
         post = self.post or requests.post
         url = "%s/%s" % (self.cfg["server"].rstrip("/"), secret("trading-research-ntfy-topic"))
         try:
-            r = post(url, data=body.encode(), headers={"Title": title, "Priority": str(self.cfg["priority"][payload.get("priority", "NORMAL")])},
+            r = post(url, data=body.encode(), headers={"Title": title.encode("ascii", "replace").decode(),   # headers must be ASCII
+                                                       "Priority": str(self.cfg["priority"][payload.get("priority", "NORMAL")])},
                      timeout=20)
         except Exception as ex:
             return {"result": "failed", "http_status": None, "info": type(ex).__name__}
@@ -196,7 +218,8 @@ def status_of(registry, notif_id):
     return "pending"
 
 
-PROVIDER_LABEL = ("QUEUED", "ACCEPTED BY PROVIDER", "DELIVERED (owner-confirmed)", "ACKNOWLEDGED", "FAILED",
+PROVIDER_LABEL = ("QUEUED", "ACCEPTED BY PROVIDER", "DELIVERED (provider receipt)", "DELIVERED (owner-confirmed)",
+                  "ACKNOWLEDGED", "NOT ACKNOWLEDGED (expired)", "FAILED",
                   "LOGGED FOR DIGEST", "EXPIRED UNSENT", "UNKNOWN (interrupted)")
 
 
@@ -210,6 +233,10 @@ def provider_status(registry, notif_id, ds=None):
         return "ACKNOWLEDGED"
     if "delivered_confirmed_by_owner" in res:
         return "DELIVERED (owner-confirmed)"
+    if "emergency_expired_unacknowledged" in res:
+        return "DELIVERED, NOT ACKNOWLEDGED (expired)" if "delivered_confirmed_by_provider" in res else "NOT ACKNOWLEDGED (expired)"
+    if "delivered_confirmed_by_provider" in res:
+        return "DELIVERED (provider receipt)"
     if "sent" in res:
         return "ACCEPTED BY PROVIDER"
     if "routed_to_digest" in res:
@@ -303,6 +330,43 @@ def dispatch(registry, now, channels, cfg):
     return out
 
 
+def poll_receipts(registry, now, pushover, max_age_hours=26, get=None):
+    """Check Pushover receipts of HIGH alerts sent at emergency priority and record what the provider confirms:
+    'delivered_confirmed_by_provider' (reached a device), 'acknowledged' (someone tapped Acknowledge) or
+    'emergency_expired_unacknowledged'. Each fact is recorded once; polling stops at acknowledgement or expiry.
+    Non-emergency messages have no receipt and stay ACCEPTED BY PROVIDER."""
+    out = []
+    dl = registry.records("delivery")
+    done = {}
+    for d in dl:
+        done.setdefault(d["payload"]["notification_id"], set()).add(d["payload"]["result"])
+    for d in dl:
+        p = d["payload"]
+        info = p.get("info") or ""
+        if p["result"] != "sent" or p.get("channel") != "pushover" or not info.startswith("receipt "):
+            continue
+        nid, rid = p["notification_id"], info.split()[1]
+        have = done.get(nid, set())
+        if "acknowledged" in have or "emergency_expired_unacknowledged" in have:
+            continue
+        if now - datetime.fromisoformat(d["created_utc"]) > timedelta(hours=max_age_hours):
+            continue
+        rc = pushover.receipt(rid, get=get)
+        if rc.get("error"):
+            out.append((nid, "receipt check failed: %s" % rc["error"]))
+            continue
+        for res, cond, when in (("delivered_confirmed_by_provider", rc.get("last_delivered_at"), rc.get("last_delivered_at")),
+                                ("acknowledged", rc.get("acknowledged"), rc.get("acknowledged_at")),
+                                ("emergency_expired_unacknowledged", rc.get("expired") and not rc.get("acknowledged"), rc.get("expires_at"))):
+            if cond and res not in have:
+                registry.append("delivery", {"notification_id": nid, "channel": "pushover", "attempt_id": "%s-receipt" % nid,
+                                             "result": res, "at_utc": now.isoformat(),
+                                             "provider_time_utc": datetime.fromtimestamp(when, timezone.utc).isoformat() if when else None,
+                                             "info": "Pushover receipt"}, idem_key="delivery:%s:%s" % (nid, res), now=now)
+                out.append((nid, res))
+    return out
+
+
 def registry_priority(notifs, nid):
     for r in notifs:
         if r["record_id"] == nid:
@@ -351,6 +415,9 @@ def queue_digest(registry, now, cfg, snapshot=None, extra=None, positions=None):
         attention.append("preflight %s" % pf["verdict"])
     if failed:
         attention.append("%d notification(s) not delivered" % len(failed))
+    unack = [d for d in dl if d["payload"]["result"] == "emergency_expired_unacknowledged" and today(d["created_utc"])]
+    if unack:
+        attention.append("%d HIGH alert(s) expired without acknowledgement" % len(unack))
     if extra and "no verified snapshot" in extra:
         attention.append("backup")
     lines = ["System: %s. Last scan %s." % (system, LC.et(last)),
@@ -368,15 +435,17 @@ def queue_digest(registry, now, cfg, snapshot=None, extra=None, positions=None):
     return not r["duplicate"]
 
 
-def check_liveness(registry, now, cfg, fx_open):
+def check_liveness(registry, now, cfg, fx_open, position_open=False):
     """HIGH alerts for a scan gap beyond the limit (while the FX market is open) and for a digest that was due but
     has not been delivered. Each gap or missed digest alerts once."""
     alerts = []
     runs = registry.records("scan_run")
     last = datetime.fromisoformat(runs[-1]["payload"]["completed_utc"]) if runs else None
-    if fx_open and (last is None or now - last > timedelta(hours=cfg["scan_gap_hours"])):
+    limit = cfg.get("scan_gap_hours_with_position", cfg["scan_gap_hours"]) if position_open else cfg["scan_gap_hours"]
+    if fx_open and (last is None or now - last > timedelta(hours=limit)):
         key = "gap:%s" % (last.isoformat() if last else "never")
-        r = registry.append("notification", LC.alert("HIGH", "NO SUCCESSFUL SCAN for more than %d h" % cfg["scan_gap_hours"],
+        r = registry.append("notification", LC.alert("HIGH", "NO SUCCESSFUL SCAN for more than %s h%s" % (
+                                                         limit, " WITH A PAPER POSITION OPEN" if position_open else ""),
                                                      **{"class": "RISK/SYSTEM ALERT", "event_time_et": LC.et(now),
                                                         "why_sent": "last successful scan %s" % LC.et(last)}),
                             idem_key=key, now=now)

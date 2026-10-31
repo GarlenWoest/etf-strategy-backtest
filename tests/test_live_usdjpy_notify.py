@@ -210,3 +210,48 @@ def test_digest_says_plainly_when_no_readiness_check_has_run(reg):
     N.queue_digest(reg, t, CFG)
     body = reg.records("notification")[-1]["payload"]["body"]
     assert body.startswith("System: running; readiness not checked yet") and "UNKNOWN" not in body.splitlines()[0]
+
+
+class Resp_:
+    def __init__(self, j, code=200):
+        self._j, self.status_code = j, code
+
+    def json(self):
+        return self._j
+
+
+def test_receipts_record_delivery_acknowledgement_and_expiry_once(reg):
+    """Phase F: Pushover's official receipts exist only for emergency (HIGH) messages. HTTP 200 alone stays
+    ACCEPTED BY PROVIDER; a receipt can confirm delivery to a device and acknowledgement, or expiry without one."""
+    a, b, c = queue(reg, "HIGH", key="a"), queue(reg, "HIGH", key="b"), queue(reg, "NORMAL", key="c")
+    for n, info in ((a, "receipt AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), (b, "receipt BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"), (c, "queued by Pushover")):
+        reg.append("delivery", {"notification_id": n["record_id"], "channel": "pushover", "attempt_id": n["record_id"] + "-1",
+                                "result": "sent", "http_status": 200, "info": info, "at_utc": DAY.isoformat()}, now=DAY)
+    t = 1793000000
+    answers = {"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA": {"acknowledged": 1, "acknowledged_at": t + 60, "last_delivered_at": t, "expired": 0},
+               "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB": {"acknowledged": 0, "acknowledged_at": 0, "last_delivered_at": t, "expired": 1, "expires_at": t + 3600}}
+    calls = []
+    get = lambda url, params=None, timeout=None: calls.append(url) or Resp_(answers[url.split("/")[-1][:-5]])
+    po = N.Pushover(CFG["pushover"])
+    N.poll_receipts(reg, DAY + timedelta(minutes=5), po, get=get)
+    N.poll_receipts(reg, DAY + timedelta(minutes=20), po, get=get)               # final states: no more polling
+    assert len(calls) == 2
+    assert N.provider_status(reg, a["record_id"]) == "ACKNOWLEDGED"
+    assert N.provider_status(reg, b["record_id"]) == "DELIVERED, NOT ACKNOWLEDGED (expired)"
+    assert N.provider_status(reg, c["record_id"]) == "ACCEPTED BY PROVIDER"            # no receipt for non-emergency
+    assert len([d for d in reg.records("delivery") if d["payload"]["result"] == "acknowledged"]) == 1
+
+
+def test_fallback_after_two_failed_primary_attempts_then_no_resend(reg):
+    """Phase F: primary fails twice (backoff respected) -> fallback sends; later runs never send again; every failed
+    attempt is recorded; no notification or trading record is duplicated."""
+    n = queue(reg, "NORMAL", key="fb")
+    p, f = Fake("pushover", results=("failed", "failed")), Fake("ntfy")
+    N.dispatch(reg, DAY, [p, f], CFG)                                          # primary attempt 1 fails
+    N.dispatch(reg, DAY + timedelta(seconds=30), [p, f], CFG)                  # inside the 1-min backoff: nothing
+    N.dispatch(reg, DAY + timedelta(minutes=2), [p, f], CFG)                   # attempt 2 fails -> fallback
+    N.dispatch(reg, DAY + timedelta(minutes=30), [p, f], CFG)
+    res = [(d["channel"], d["result"]) for d in N.deliveries(reg, n["record_id"]) if d["result"] != "attempting"]
+    assert res == [("pushover", "failed"), ("pushover", "failed"), ("ntfy", "sent")]
+    assert len(p.sent) == 2 and len(f.sent) == 1 and len(reg.records("notification")) == 1
+    assert N.provider_status(reg, n["record_id"]) == "ACCEPTED BY PROVIDER"
