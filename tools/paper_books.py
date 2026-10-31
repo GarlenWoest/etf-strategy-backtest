@@ -10,7 +10,7 @@ User decisions 2026-10-23: four fictional $100 books start at the open of Monday
   MIX  benchmark: 70% SPY / 30% GLD, rebalanced at the next open after each month-end
 Costs as Study 1: 0.07% one-way (unleveraged), 0.10% (leveraged), $0 commission; fractional shares; long only; no margin;
 uninvested cash earns the T-bill rate (^IRX / 100 / 252 per trading day, prior day's value); dividends paid in cash on
-the ex-date (quoted prices + yfinance dividends, so past fills never change when Yahoo rescales adjusted history).
+the ex-date (quoted prices + cash dividends, so past fills never change when a vendor rescales adjusted history).
 Exempt from hard rule 2 for paper/ ONLY: writes nothing outside paper/, reads live/state.json, imports nothing from src/;
 nothing here may enter data/, research_log.csv or any study.
 
@@ -186,12 +186,16 @@ def init(p, start):
 
 # ---------------------------------------------------------------- data
 
+SOURCE = "Alpaca market data, consolidated SIP feed (quoted Open/Close; corporate-actions cash dividends); FRED DTB3 T-bill"
+
+
 def download(tickers, start):
-    import yfinance as yf
-    df = yf.download(sorted(set(tickers)), start=start, auto_adjust=False, actions=True, progress=False, threads=False)
+    """Quoted daily Open/Close, cash dividends and the T-bill rate (Phase G 2026-10-31: Alpaca SIP + FRED DTB3,
+    replacing Yahoo; see tools/market_data_alpaca.py and tools/migration_check.py). Book rules are unchanged."""
+    import market_data_alpaca as MD
+    df = MD.frame(sorted(set(tickers)), start, adjusted=False, dividends=True)
     if df is None or df.empty:
         raise RuntimeError("empty download")
-    df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
     return df
 
 
@@ -421,7 +425,7 @@ def save_inputs(p, d, need, O, C, Cf, D, rate):
     ts = pd.Timestamp(d)
     num = lambda x: None if x is None or np.isnan(x) else float(x)
     rec = {"label": LABEL, "date": d.isoformat(), "saved_at_et": now_et().strftime("%Y-%m-%d %H:%M:%S ET"),
-           "source": "Yahoo Finance via yfinance (unadjusted Open/Close, Dividends, ^IRX)", "tbill_daily_rate": rate,
+           "source": SOURCE, "tbill_daily_rate": rate,
            "open": {t: num(O.loc[ts, t]) for t in sorted(need)}, "close": {t: num(C.loc[ts, t]) for t in sorted(need)},
            "close_ffilled": {t: num(Cf.loc[ts, t]) for t in sorted(need)},
            "dividends": {t: float(D[t].get(ts, 0.0)) for t in sorted(need) if D is not None and t in D.columns

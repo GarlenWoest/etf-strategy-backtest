@@ -109,11 +109,13 @@ def is_month_end_trading_day(d):
 # ---------------------------------------------------------------- data and the P2 rule
 
 def download(tickers, adjusted):
-    import yfinance as yf
-    df = yf.download(tickers, period="3y", auto_adjust=adjusted, progress=False, threads=False)
+    """Three years of daily Open/Close, adjusted or quoted (Phase G 2026-10-31: Alpaca SIP, replacing Yahoo; the P2
+    rule and its parameters are unchanged; tools/migration_check.py reproduced both recorded month-end signals)."""
+    import market_data_alpaca as MD
+    start = (date.today() - timedelta(days=3 * 366)).isoformat()
+    df = MD.frame(sorted(set(tickers)), start, adjusted=adjusted, dividends=False)
     if df is None or df.empty:
         raise RuntimeError("empty download")
-    df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
     return df
 
 

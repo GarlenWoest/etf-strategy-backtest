@@ -112,7 +112,8 @@ def test_snapshot_and_export(reg, tmp_path):
 
 def test_research_code_never_imports_the_forward_system():
     """Monitoring/forward code may use research utilities; research code must never import it."""
-    allowed = ("src/live_usdjpy/", "tests/", "tools/usdjpy_")
+    allowed = ("src/live_usdjpy/", "tests/", "tools/usdjpy_",
+               "tools/market_data_alpaca.py", "tools/migration_check.py")    # monitoring tools (Phase G): read-only data client
     bad = []
     for f in list((PROJECT_ROOT / "src").rglob("*.py")) + list((PROJECT_ROOT / "tools").glob("*.py")):
         rel = str(f.relative_to(PROJECT_ROOT))

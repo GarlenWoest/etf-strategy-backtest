@@ -30,7 +30,7 @@ ALPACA_HOST = "https://data.alpaca.markets"
 ALLOWED = {
     OANDA_HOST: (r"^/v3/accounts/[0-9]{3}-[0-9]{3}-[0-9]{6,9}-[0-9]{3}/pricing$",
                  r"^/v3/instruments/(USD_JPY|GBP_USD)/candles$"),
-    ALPACA_HOST: (r"^/v2/stocks/quotes/latest$", r"^/v2/stocks/bars$"),
+    ALPACA_HOST: (r"^/v2/stocks/quotes/latest$", r"^/v2/stocks/bars$", r"^/v1/corporate-actions$"),   # all read-only market data
 }
 FX = {"usdjpy": "USD_JPY", "gbpusd": "GBP_USD"}
 PIP = {"USD_JPY": 0.01, "GBP_USD": 0.0001}
@@ -185,6 +185,42 @@ def timing(quote_utc, meta, skew_tolerance_s=2.0):
             out["server_clock_offset_s"] = round(off, 1)            # HTTP Date has 1 s resolution: +/-1 s is noise
         except Exception:
             out["server_clock_offset_s"] = None
+    return out
+
+
+def daily_ohlc(alpaca, symbols, start, end=None, adjustment="raw", feed="iex"):
+    """Daily IEX bars as {symbol: DataFrame(open, close)} indexed by New York date (same read-only bars endpoint).
+    adjustment: "raw" (quoted prices, as the paper books fill) or "all" (split and dividend adjusted, for signals).
+    feed: "iex" (one exchange) or "sip" (consolidated tape; on Alpaca's free plan only for data at least 15 minutes old,
+    which daily bars of completed days are)."""
+    params = {"symbols": ",".join(symbols), "timeframe": "1Day", "start": str(start), "feed": feed, "adjustment": adjustment,
+              "limit": 10000}
+    if end:
+        params["end"] = str(end)
+    out = {s: {} for s in symbols}
+    for _ in range(50):
+        j = _get(ALPACA_HOST, "/v2/stocks/bars", params, alpaca._h(), alpaca.http_get)
+        for s, bars in (j.get("bars") or {}).items():
+            for b in bars:
+                out[s][pd.Timestamp(_ts(b["t"]).astimezone(NY).date())] = (float(b["o"]), float(b["c"]))
+        if not j.get("next_page_token"):
+            break
+        params = dict(params, page_token=j["next_page_token"])
+    return {s: pd.DataFrame.from_dict(v, orient="index", columns=["open", "close"]).sort_index() for s, v in out.items()}
+
+
+def cash_dividends(alpaca, symbols, start, end):
+    """Cash dividends {symbol: {ex_date: amount per share}} from Alpaca's corporate-actions data (read-only GET)."""
+    params = {"symbols": ",".join(symbols), "types": "cash_dividend", "start": str(start), "end": str(end), "limit": 1000}
+    out = {s: {} for s in symbols}
+    for _ in range(20):
+        j = _get(ALPACA_HOST, "/v1/corporate-actions", params, alpaca._h(), alpaca.http_get)
+        for d in (j.get("corporate_actions") or {}).get("cash_dividends", []):
+            if d.get("symbol") in out and d.get("ex_date"):
+                out[d["symbol"]][pd.Timestamp(d["ex_date"])] = float(d["rate"])
+        if not j.get("next_page_token"):
+            break
+        params = dict(params, page_token=j["next_page_token"])
     return out
 
 
