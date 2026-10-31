@@ -139,3 +139,77 @@ Tickets are immutable, versioned `ticket` records (a new version when the conten
 - **Status labels:** QUEUED / ACCEPTED BY PROVIDER / DELIVERED (owner-confirmed) / ACKNOWLEDGED / FAILED / LOGGED FOR DIGEST / EXPIRED UNSENT. HTTP 200 is only ACCEPTED BY PROVIDER.
 
 **Tests:** +18 for D and E. Short phone text with the ticket pointer; ticket fields and labels; versions only on change; routing to the digest with reasons; dedup, daily cap and expiry, with HIGH never suppressed; a stale price blocks entries and exits; a rule-evaluation block defers instead of recording NO TRADE; preflight alerts only on persistence, with recovery. Plus the 11 preflight unit tests.
+
+## F. Delivery, acknowledgements and independent risk monitoring (2026-10-31, branch `phase-fi`; merged only after Sunday's 17:02 ET scan is verified)
+
+**Delivery status, as the system now reports it:** QUEUED → ACCEPTED BY PROVIDER (HTTP 200: the provider took it; **not** proof that a phone showed it) → DELIVERED (provider receipt, or owner-confirmed) → ACKNOWLEDGED; or FAILED, LOGGED FOR DIGEST, EXPIRED UNSENT, NOT ACKNOWLEDGED (expired).
+
+- **Pushover receipts exist only for emergency priority**, which the system uses only for HIGH alerts. Each run now polls their official receipts (`/1/receipts/<id>.json`, read-only) and records, once each, delivered to a device, acknowledged, or expired without acknowledgement. Everything else stays ACCEPTED BY PROVIDER. The digest lists HIGH alerts that expired unacknowledged.
+- **Real check:** the receipt of the 10-29 HIGH alert (the false "DIGEST MISSING") shows **delivered to a device (last 21:02:43 ET), never acknowledged, expired 21:07:43 ET**. It repeated every 5 minutes for an hour. Tapping "Acknowledge" on an emergency alert stops the repeats and is now recorded.
+- **ntfy fallback:** fallback after 2 failed primary attempts, with backoff respected, is tested. Every failed attempt is recorded, nothing is resent after acceptance, and no notification or trading record is duplicated. A **real** send through the system's own ntfy sender (DEMO registry) is queued: it fell in quiet hours, so it goes at 07:01 ET 10-31. Arrival on the phone needs your confirmation.
+- **Fix:** ntfy title headers are made ASCII-safe (a non-ASCII title would have failed the request).
+
+**Independent risk monitoring (audit against the code):**
+
+| Question | Finding |
+|---|---|
+| Risk checks at the claimed cadence | Yes: with a position or pending setup and FX open, every run (15 min) scans and manages positions (test) |
+| Stale prices can't create false exits | Yes since Phase D while FX is open. **Defect fixed:** while FX was closed, `manage()` still exited on the closed-market last price (e.g. the scan right after Friday 17:00). Now an exit condition met without a tradable price becomes **EXIT PENDING** (one NORMAL alert) and fills at the first live price after the reopen, with the weekend gap taken as it comes. The pending decision takes precedence over later exit reasons |
+| Exposure recalculated after fills | Yes: from the post-fill ledger, moving with the mark (test) |
+| Drawdown and daily loss after interruptions | Yes: rebuilt from append-only position snapshots; a reopened registry gives identical peak, day-start and cash (test). Limitation: if the Mac sleeps through a day start, "day start" is the first scan of that day |
+| Position or balance discrepancy → HALTED | Yes: reconciliation mismatch → HALTED + HIGH (existing test) |
+| An exit condition can't go unnoticed | Price blocked → HIGH "PAPER POSITION UNMONITORED"; market closed → EXIT PENDING; **new:** a scan gap over 2 h with a paper position open → HIGH (was 30 h for everything) |
+| Closures and weekend gaps | Handled as above; no stop is presented as guaranteed (tickets say "not a stop order, no guaranteed exit price") |
+
+Approved risk limits unchanged. **Tests:** +10 (receipts, fallback, cadence, pending exits including through the scanner, interruption, exposure, gap with a position).
+
+## G. Yahoo migration and duplicated scheduled work (2026-10-31, branch)
+
+**Source check, criteria fixed before running** (`tools/migration_check.py`): S1 coverage of every instrument-day 10-26..30; S2 opens within 0.10% and S3 closes within 0.10% of the prices the books actually used; S4 watchlist month-end targets reproduced.
+
+| Feed | S1 | S2 opens | S3 closes | S4 signals | Result |
+|---|---|---|---|---|---|
+| Alpaca IEX (single exchange) | pass | **14 of 75 over** (worst AGQ −0.42%) | **4 of 75 over** (worst AGQ −0.38%) | pass | **FAIL**: not used |
+| Alpaca SIP (consolidated; free plan, data ≥ 15 min old) | pass | all within (worst TQQQ 0.075%) | identical | pass (09-30 and 10-30) | **PASS** |
+
+**Replay proof** (books replayed from the start with the new source, compared with the stored books through 10-30): identical trade decisions (8 of 8), identical share counts, every book value within **0.0002%**. Stored books untouched.
+
+**Migrated on the branch:** `paper_books.py` and `watchlist_signals.py` now read quoted/adjusted daily bars from Alpaca SIP, cash dividends from Alpaca corporate actions (added to the read-only allow-list), and the T-bill from FRED DTB3 instead of `^IRX`. Book and watchlist rules are unchanged; the source label in `paper/inputs/` changes.
+- **Not verified:** dividends against a second vendor (no further Yahoo download). Only a plausibility check: 13 monthly payments for IEF/TLT, 4–5 quarterly for SPY/QQQ/VTI and the leveraged funds, none for GLD/SLV/USO/UGL/AGQ/UCO.
+- **Still on Yahoo:** `tools/market_intel.py` (weekday step 2b; superseded by the runner) and `tools/brief_market_data.py` (Sunday brief; not in the approved scope).
+
+**Proposal for the scheduled tasks (NOT applied; your approval needed):**
+
+*Weekday task "watchlist-alerts":*
+```diff
+-## Step 2b: market data snapshot (read-only; indicative prices; no signal)
+-cd … && .venv/bin/python -I tools/market_intel.py snapshot 2>/dev/null
+-…record step snapshot…
+-## Step 2c: official economic event poll (read-only; no signal)
+-cd … && .venv/bin/python -I tools/events.py poll 2>/dev/null
+-…record step events…
+```
+Why: the LaunchAgent takes an OANDA/Alpaca snapshot every hour and polls the official calendars four times a day plus after releases; step 2b is the last automated Yahoo use; step 2c duplicates the runner's poll. The finish line would drop "each market's status from step 2b". Steps 0, 1, 2, 3 and 4 stay (watchlist and paper books then run on Alpaca SIP).
+
+*Sunday task "weekly-market-brief":*
+- Option 1 (recommended): migrate `tools/brief_market_data.py` to the same Alpaca SIP module (needs your approval, since it wasn't in the 10-29 scope) and change the Sources line from "Yahoo Finance (yfinance), FRED" to "Alpaca (consolidated SIP), FRED".
+- Keep Step C (private backup): the runner now pushes daily, but the Sunday push is still needed to include the new brief.
+- Optional: point to the new weekly review (`live/usdjpy/reviews/`) in the Sunday notification.
+
+*Also noted:* the Claude tasks' own PushNotification is unreliable (Remote Control); their NOTIFY lines could go through the plain-Python notifier instead. That's a larger change, so it's left as an option.
+
+## H. Weekly opportunity review (2026-10-31, branch)
+
+`src/live_usdjpy/review.py`; written automatically to `live/usdjpy/reviews/week_<Monday>.md` at the first run after Saturday 12:00 ET (FX closed), with a NORMAL "Weekly review ready" notification; `usdjpy_pipeline.py weekly-review [--date]` prints any week. Ten factual sections:
+1. opportunities;
+2. experimental ideas and their status;
+3. approved paper signals (none);
+4. resolved paper positions;
+5. blocked, invalidated or expired setups;
+6. notification failures and delivery counts;
+7. readiness and data quality (verdict counts, DEGRADED/BLOCKED checks, runner gaps);
+8. official events;
+9. expected vs observed;
+10. lessons and standing limitations.
+
+Below 30 resolved signals it says **no statistical conclusion is possible**, and it never suggests parameter changes or new strategies. Real test on a copy of the live registry (week of 10-26) shows the F002 trigger and block, the F001 watch, the BoJ statement, the MoF release and the 27-minute sleep gap. **Tests:** +2.
