@@ -7,8 +7,13 @@ never enter data/, research_log.csv or any study.
 Prints:
   - weekly and year-to-date total returns (adjusted closes) for SPY, QQQ, GLD, SLV, USO, TLT, measured from the last
     close of the prior week / prior year to the last close of the most recent completed trading week;
-  - gold (COMEX front month GC=F and GLD), the ICE US dollar index (DX-Y.NYB), and the 10-year real yield (FRED DFII10).
+  - gold reference GLD, the Fed's nominal broad US dollar index (FRED DTWEXBGS), and the 10-year real yield (FRED DFII10).
 If a source fails, the affected line says so; nothing is estimated or filled.
+
+Sources (2026-11-01, approved migration away from Yahoo, whose terms prohibit automated collection): ETF prices from
+Alpaca market data, consolidated SIP feed, split/dividend-adjusted (tools/market_data_alpaca.py; the same source check
+that passed for the paper books). COMEX gold futures and the ICE dollar index have no licensed free source here: the
+futures line is dropped (GLD is the gold reference) and the dollar line uses the Fed's broad index, a different index.
 
 Usage: .venv/bin/python -I tools/brief_market_data.py
 """
@@ -29,13 +34,22 @@ def week_bounds(today):
 
 
 def closes(tickers, start):
-    import yfinance as yf
-    df = yf.download(tickers, start=start, auto_adjust=True, progress=False, threads=False)
+    """Adjusted daily closes from Alpaca's consolidated SIP feed (read-only)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import market_data_alpaca as MD
+    df = MD.frame(tickers, start, adjusted=True, dividends=False)
     if df is None or df.empty:
         raise RuntimeError("empty download")
-    c = df["Close"] if isinstance(df.columns, pd.MultiIndex) else df[["Close"]].rename(columns={"Close": tickers[0]})
-    c.index = pd.to_datetime(c.index).tz_localize(None).normalize()
-    return c
+    return df["Close"]
+
+
+def fred(series, start):
+    y = pd.read_csv("https://fred.stlouisfed.org/graph/fredgraph.csv?id=%s&cosd=%s" % (series, start))
+    y.columns = ["date", "v"]
+    y["v"] = pd.to_numeric(y["v"], errors="coerce")
+    return y.dropna()
 
 
 def main():
@@ -51,23 +65,32 @@ def main():
         for t in TICKERS:
             last = c[t].dropna().iloc[-1]
             print("| %s | %.2f | %+.2f%% | %+.2f%% |" % (t, last, 100 * (last / prev_wk[t] - 1), 100 * (last / prev_yr[t] - 1)))
-        print("\nReturns use dividend-adjusted closes (Yahoo Finance via yfinance).")
+        print("\nReturns use split- and dividend-adjusted closes (Alpaca market data, consolidated SIP feed).")
     except Exception as e:                                  # report, never fill
         print("ETF returns unavailable: %s" % e)
     print("\n**Gold and macro**\n")
     try:
-        g = closes(["GC=F", "GLD", "DX-Y.NYB"], (fri - timedelta(days=21)).isoformat()).loc[:pd.Timestamp(fri)]
-        for t, name in (("GC=F", "Gold, COMEX front month ($/oz)"), ("GLD", "GLD"), ("DX-Y.NYB", "US dollar index (ICE DXY)")):
-            s = g[t].dropna()
-            wk = s.loc[:pd.Timestamp(mon) - pd.Timedelta(days=1)].iloc[-1]
-            print("- %s: %.2f on %s (week %+.2f%%)" % (name, s.iloc[-1], s.index[-1].date(), 100 * (s.iloc[-1] / wk - 1)))
+        s = closes(["GLD"], (fri - timedelta(days=21)).isoformat())["GLD"].loc[:pd.Timestamp(fri)].dropna()
+        wk = s.loc[:pd.Timestamp(mon) - pd.Timedelta(days=1)].iloc[-1]
+        print("- GLD (gold reference; adjusted): %.2f on %s (week %+.2f%%)" % (s.iloc[-1], s.index[-1].date(), 100 * (s.iloc[-1] / wk - 1)))
     except Exception as e:
-        print("- Gold / dollar unavailable: %s" % e)
+        print("- GLD unavailable: %s" % e)
+    print("- COMEX gold futures: not shown (no licensed free source; GLD is the gold reference)")
     try:
-        y = pd.read_csv("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10&cosd=%s" % (fri - timedelta(days=30)).isoformat())
-        y.columns = ["date", "v"]
-        y["v"] = pd.to_numeric(y["v"], errors="coerce")
-        y = y.dropna()
+        y = fred("DTWEXBGS", (fri - timedelta(days=30)).isoformat())
+        y = y[pd.to_datetime(y["date"]) <= pd.Timestamp(fri)]
+        prev = y[pd.to_datetime(y["date"]) < pd.Timestamp(mon)]
+        name = "US dollar, Fed nominal broad index (FRED DTWEXBGS; not the ICE DXY)"
+        if pd.Timestamp(y["date"].iloc[-1]) < pd.Timestamp(mon):          # the Fed publishes this series weekly
+            print("- %s: latest published value %.2f on %s; no value yet for this week (published weekly)" % (
+                name, y["v"].iloc[-1], y["date"].iloc[-1]))
+        else:
+            print("- %s: %.2f on %s (week %+.2f%%)" % (name, y["v"].iloc[-1], y["date"].iloc[-1],
+                                                      100 * (y["v"].iloc[-1] / prev["v"].iloc[-1] - 1)))
+    except Exception as e:
+        print("- US dollar index unavailable: %s" % e)
+    try:
+        y = fred("DFII10", (fri - timedelta(days=30)).isoformat())
         y = y[pd.to_datetime(y["date"]) <= pd.Timestamp(fri)]
         prev = y[pd.to_datetime(y["date"]) < pd.Timestamp(mon)]
         print("- 10-year real yield (FRED DFII10): %.2f%% on %s (week %+.2f pp)" % (
