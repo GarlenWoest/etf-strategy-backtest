@@ -47,10 +47,10 @@ _Draft 2026-11-02 at the owner's request (codes confirmed by read-only metadata 
 - 462 monthly values, 1985-07 to 2023-12. The cut was made server-side with `endPeriod=2023-12`, so no 2024+ rows were transferred.
 - SHA-256 recorded in `research/DATA_REGISTER.csv`; tool `tools/download_oecd_irstci.py`.
 
-**Comparison with FRED IRSTCI01JPM156N: BLOCKED (not run).**
-- The project holds **no pre-2024 FRED copy** of this series. The only copy is the live runner's financing cache, which covers 2025-09 to 2026-09.
-- So there are 0 shared months with the pre-2024 OECD file.
-- Running the comparison needs either a pre-2024 FRED download (`coed=2023-12-31`), or a comparison on 2024+ months against the live cache. The second is data quality, not rule evaluation, but it would need your explicit approval under D1.
+**Comparison with FRED IRSTCI01JPM156N (owner option (a) modified, 2026-11-02):**
+- **Method:** FRED was fetched for 1985-07 to 2023-12 **in memory only**, compared, then discarded per FRED's terms (RR-1). Nothing was written to disk. The response's SHA-256 (`88723c1c…`) and the result are in `research/DATA_REGISTER.csv`.
+- **Result:** **462 shared months (1985-07 to 2023-12), 0 mismatches (none above 1e-9), maximum difference 0.000000 pp.** No month appears in only one of the two sources.
+- **Conclusion:** the OECD series `JPN.M.IRSTCI.PA._Z._Z._Z._Z.N` is the same series FRED mirrors as IRSTCI01JPM156N, so switching to it is a **source switch of the same series** (pending the live overlap test and the freeze).
 
 **OECD terms [V, read 2026-11-02, https://www.oecd.org/en/about/terms-conditions.html]:**
 - Data may be downloaded, copied, adapted, distributed and shared "for any purpose, even for commercial use".
@@ -90,8 +90,8 @@ _Draft 2026-11-02 at the owner's request (codes confirmed by read-only metadata 
 ## Decisions needed (together)
 
 1. Candidate 1 (Treasury bank-discount), with the overlap condition.
-2. Candidate 2: dataflow and key confirmed; approve a pre-2024 value comparison with FRED IRSTCI01JPM156N before deciding.
+2. Candidate 2: dataflow, key and pre-2024 values confirmed identical to FRED; decide with the live overlap condition.
 3. Candidate 3 as validation only.
 4. Terms: read and recorded 2026-11-02 (OECD and BoJ verified; Treasury has no explicit statement).
 5. **Timing (owner decision 2026-11-02):** no freeze or deploy until the 2026-11-06 batch has run clean for one full week. Target: review Saturday 2026-11-14, deploy that weekend if approved. **Not stacked onto the 11-06 batch.**
-6. The FRED comparison for candidate 2: approve a pre-2024 FRED IRSTCI01JPM156N download, or a 2024+ comparison against the live cache.
+6. Candidate 2's FRED comparison: done (identical on all 462 shared months, 1985-07 to 2023-12).
