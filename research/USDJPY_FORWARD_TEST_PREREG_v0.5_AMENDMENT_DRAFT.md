@@ -28,7 +28,10 @@ _Draft 2026-11-02 at the owner's request (codes confirmed by read-only metadata 
 - The USD leg uses the U.S. Treasury Daily Treasury Bill Rates, 13-week bank-discount rate (the same rate as H.15 DTB3), dated by its business date, under the unchanged v0.4 age rules: valid ≤ 3 US business days, carried 4–5, UNRESOLVED > 5.
 - **Switch condition:** a 10-business-day live overlap with identical values on every overlapping date. Otherwise FRED DTB3 remains.
 
-**Terms:** U.S. government publication [U: Treasury site terms not read].
+**Terms (read 2026-11-02):**
+- No reuse, copyright or rate-limit statement was found on the Treasury pages read (interest-rate statistics; Site Policies and Notices).
+- U.S. federal works are generally not copyrighted (17 U.S.C. §105). That is general law, not a Treasury statement [U].
+- Treasury describes the bill rates as "indicative closing market bid quotations", collected by the New York Fed around 3:30 PM [V].
 
 ## Candidate 2: Japan leg from the OECD directly
 
@@ -40,9 +43,20 @@ _Draft 2026-11-02 at the owner's request (codes confirmed by read-only metadata 
 - **Series key:** `JPN.M.IRSTCI.PA._Z._Z._Z._Z.N` is **available**, with 495 observations reported by the availability constraint (metadata) [V: https://sdmx.oecd.org/public/rest/availableconstraint/OECD.SDD.STES,DSD_STES@DF_FINMARK,4.0/JPN.M.IRSTCI......?mode=available].
 - **Data request (for later, not used):** `https://sdmx.oecd.org/public/rest/data/OECD.SDD.STES,DSD_STES@DF_FINMARK,4.0/JPN.M.IRSTCI.PA._Z._Z._Z._Z.N`.
 
-**Still to confirm:**
-- that the values equal FRED IRSTCI01JPM156N on shared months: a comparison on pre-2024 months, after you approve that data download;
-- the OECD terms of use [U].
+**Downloaded (owner approval 2026-11-02), pre-2024 only:**
+- 462 monthly values, 1985-07 to 2023-12. The cut was made server-side with `endPeriod=2023-12`, so no 2024+ rows were transferred.
+- SHA-256 recorded in `research/DATA_REGISTER.csv`; tool `tools/download_oecd_irstci.py`.
+
+**Comparison with FRED IRSTCI01JPM156N: BLOCKED (not run).**
+- The project holds **no pre-2024 FRED copy** of this series. The only copy is the live runner's financing cache, which covers 2025-09 to 2026-09.
+- So there are 0 shared months with the pre-2024 OECD file.
+- Running the comparison needs either a pre-2024 FRED download (`coed=2023-12-31`), or a comparison on 2024+ months against the live cache. The second is data quality, not rule evaluation, but it would need your explicit approval under D1.
+
+**OECD terms [V, read 2026-11-02, https://www.oecd.org/en/about/terms-conditions.html]:**
+- Data may be downloaded, copied, adapted, distributed and shared "for any purpose, even for commercial use".
+- Required citation: `OECD (year), (dataset name), (data source) DOI or URL (accessed on (date))`.
+- Third-party restrictions may apply to some data.
+- API rate limits are not stated on the pages read [U].
 
 **Proposed text:** the JPY leg takes `JPN.M.IRSTCI.PA._Z._Z._Z._Z.N` from the OECD API. This is a source switch of the same series under the unchanged v0.4 age rules, conditional on the value comparison and the live overlap test.
 
@@ -53,7 +67,12 @@ _Draft 2026-11-02 at the owner's request (codes confirmed by read-only metadata 
 - **Coverage:** start 1998-01-05; metadata reported last observation 2026-10-29 and last update 2026-11-02 [V: live `getMetadata` response, https://www.stat-search.boj.or.jp/api/v1/getMetadata?format=json&lang=en&db=FM01].
 - **Companion series:** STRDCLUCONH and STRDCLUCONL, listed beside it in the manual's example.
 - **API:** base `https://www.stat-search.boj.or.jp/api/v1/` with `getDataCode`, `getDataLayer` and `getMetadata`. Example: `getDataCode?lang=en&db=FM01&code=STRDCLUCON&startDate=YYYYMM`. Launched 18 February 2026 [V: https://www.boj.or.jp/en/statistics/outline/notice_2026/not260218a.htm; manual https://www.stat-search.boj.or.jp/info/api_manual_en.pdf].
-- **Access conditions:** no API key appears in any documented request [V: manual]. A credit line is requested, and the service may be suspended without notice; the usage notice https://www.stat-search.boj.or.jp/info/api_notice_en.pdf must be read before use [U: not read in full].
+- **Access conditions:** no API key appears in any documented request [V: manual].
+- **Terms [V, usage notice read in full 2026-11-02; site notice read]:**
+  - A *released service* using the API must notify the BoJ Research and Statistics Department by email, and must show the credit "This service uses the API provided by the Bank of Japan Time-Series Data Search." together with a disclaimer that the BoJ does not guarantee the service.
+  - The API may be suspended, changed or access-limited without notice. Excessive access frequency is prohibited, but no numeric rate limit is stated. The manual caps requests at 60,000 observations.
+  - **The API notice has no storage or redistribution clause.** The site notice allows copying with the BoJ credited as source; commercial use needs prior permission; content may not be altered without permission.
+  - **This project's use** (private, non-commercial, no released service) needs no notification. Reports credit "Source: Bank of Japan". Full wording is in `research/DATA_REGISTER.csv`.
 
 **Proposed role, in this amendment: validation only, not booking.**
 - Record the daily BoJ call rate beside the monthly JPY rate used for booking.
@@ -73,4 +92,6 @@ _Draft 2026-11-02 at the owner's request (codes confirmed by read-only metadata 
 1. Candidate 1 (Treasury bank-discount), with the overlap condition.
 2. Candidate 2: dataflow and key confirmed; approve a pre-2024 value comparison with FRED IRSTCI01JPM156N before deciding.
 3. Candidate 3 as validation only.
-4. Read the Treasury, OECD and BoJ API terms before freezing.
+4. Terms: read and recorded 2026-11-02 (OECD and BoJ verified; Treasury has no explicit statement).
+5. **Timing (owner decision 2026-11-02):** no freeze or deploy until the 2026-11-06 batch has run clean for one full week. Target: review Saturday 2026-11-14, deploy that weekend if approved. **Not stacked onto the 11-06 batch.**
+6. The FRED comparison for candidate 2: approve a pre-2024 FRED IRSTCI01JPM156N download, or a 2024+ comparison against the live cache.
