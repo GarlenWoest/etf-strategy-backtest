@@ -39,3 +39,6 @@ reports/research_review/
 
 # outside-review audit responses (private; never committed)
 reports/AUDIT_RESPONSE_*
+
+# restore drill reports (private registry figures)
+reports/drills/

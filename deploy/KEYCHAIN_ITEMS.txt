@@ -1,0 +1,12 @@
+# Keychain item NAMES used by the system (generic passwords, service = name). Values live only in the macOS Keychain;
+# never put a value in this file, in logs or in git. Checked by tools/restore_drill.py (presence only).
+trading-research-oanda-token
+trading-research-oanda-account
+trading-research-alpaca-key-id
+trading-research-alpaca-secret
+trading-research-pushover-token
+trading-research-pushover-user
+trading-research-ntfy-topic
+trading-research-bls-contact
+trading-research-deadman-url
+trading-research-deadman-url-weekday
