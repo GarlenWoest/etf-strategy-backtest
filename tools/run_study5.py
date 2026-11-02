@@ -143,7 +143,7 @@ def vol_target_weights(px, sign, start, end, delay=1, target=0.10, unscaled=Fals
 # ---------------------------------------------------------------- data
 def load():
     def h10(name):
-        d = pd.read_csv(ROOT / "data/raw/board_h10/%s.csv" % name, parse_dates=["date"])
+        d = pd.read_csv(ROOT / ("data/raw/board_h10/%s.csv" % name), parse_dates=["date"])
         return d
     gbp, jpy = h10("board_h10_usd_per_gbp"), h10("board_h10_jpy_per_usd")
     tb = pd.read_csv(ROOT / "data/raw/board_h15/board_h15_tbill_3m_secondary.csv", parse_dates=["date"])
