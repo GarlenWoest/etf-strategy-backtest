@@ -39,7 +39,7 @@ All series are truncated before 2024-01-01; nothing 2024+ is opened.
 | USD per GBP, H.10 noon (Board series RXI$US_N.B.UK) | `data/raw/board_h10/board_h10_usd_per_gbp.csv` (sha256 in the register) | **Validate first** (duplicates, gaps against the H.10 Board calendar, stale runs, large moves); report before any rule is evaluated. Identical to the superseded FRED DEXUSUK copy on all 13,290 common dates (data-quality cross-check, counts only); 535 "ND" holiday rows are blank |
 | JPY per USD, H.10 noon (Board series RXI_N.B.JA) | `data/raw/board_h10/board_h10_jpy_per_usd.csv` | Identical to the superseded FRED DEXJPUS copy (validated 1990+, `reports/specialists/usdjpy/data_quality.md`) on all 13,284 common dates; re-run the same validation on the Board file |
 | Ken French daily (Mkt-RF + RF) | `data/raw/r8_kenfrench_daily/kf_factors_daily.csv` | Already used for the R7 count; units are decimal |
-| DTB3 | `data/raw/usdjpy/fred_DTB3.csv` | Validated |
+| 3-month T-bill, secondary market (Board H.15 series RIFSGFSM03_N.B; the series FRED mirrors as DTB3) | `data/raw/board_h15/board_h15_tbill_3m_secondary.csv` (sha256 in the register) | Identical to the superseded FRED DTB3 copy on all 17,491 shared dates (0 mismatches); 769 "ND" rows blank |
 | Foreign short rates | Not held, not used | Spot-only decision (§5) |
 
 ## 4. Rules (fixed numbers; nothing fitted)
@@ -58,7 +58,7 @@ All series are truncated before 2024-01-01; nothing 2024+ is opened.
 ## 5. Costs and financing
 
 - **Costs:** 0.015% of notional one-way (the frozen FX assumption, `config.yaml:258`), with 2x and 3x as kill checks.
-- **Financing: spot-only (owner decision 2026-11-02).** Positions earn the spot return only; the interest-rate differential (carry) and the broker financing markup are **not** included. Idle cash earns the USD T-bill (DTB3).
+- **Financing: spot-only (owner decision 2026-11-02).** Positions earn the spot return only; the interest-rate differential (carry) and the broker financing markup are **not** included. Idle cash earns the USD 3-month T-bill (Board H.15).
 - **Limitation, stated in every report:**
   - T1/T2 (risk claims) are scaled and unscaled versions of the same spot exposure, so the comparison is like for like, but the absolute returns exclude carry.
   - T3 (a return claim) holds one day per event, so omitted carry is at most one day's differential per event.
