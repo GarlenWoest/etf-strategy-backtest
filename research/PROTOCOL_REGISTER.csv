@@ -1,2 +1,3 @@
 protocol_id,document,version,status,sha256,frozen_utc,frozen_commit,approval,memory_seq,notes
 GOLD-GF1-GF2,research/GOLD_FORWARD_PREREG_GF1_GF2_v1.0.md,1.0,FROZEN (document),c2e198c9618c23d20f597c1fd3e286dd5e1adb852788778f56a60ac8656305bf,2026-11-02T15:15:13Z,6204932,owner 2026-11-02 (R10),100,no recording implemented; counting not started
+STATS-POLICY,research/STATS_POLICY_v1.0.md,1.0,FROZEN,8474f9597d71f58d5a388f125b87f0024cb7a5bb1eec32ea535d9492bb6e98df,2026-11-02T15:20:24Z,2fb8f18,"owner 2026-11-02 (R2, option A, P6, P7)",101,applies to Study 5 onward
