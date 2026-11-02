@@ -26,10 +26,14 @@ SOURCE_LABEL = "Alpaca market data, consolidated SIP feed (quoted Open/Close; co
 
 
 def fred_dtb3(start):
-    import requests
-    r = requests.get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3", timeout=30)
-    rows = [l.split(",") for l in r.text.strip().splitlines()[1:]]
-    s = pd.Series({pd.Timestamp(d): float(v) for d, v in rows if v not in (".", "")}).sort_index()
+    """DTB3 in percent, validated by the same fetcher as the forward ledger (HTTP status, header, finite, plausible
+    range, no future dates). Raises on failure: the paper update then reports an error; it never books 0%."""
+    from src.live_usdjpy import financing as FIN
+    obs, err = FIN.fetch("DTB3", datetime.now(timezone.utc), lookback_days=(datetime.now(timezone.utc).date()
+                                                                            - pd.Timestamp(start).date()).days + 30)
+    if err:
+        raise RuntimeError("FRED DTB3: %s" % err)
+    s = pd.Series({pd.Timestamp(d): v * 100.0 for d, v, _ in obs}).sort_index()
     return s[s.index >= pd.Timestamp(start) - pd.Timedelta(days=15)]
 
 
@@ -54,7 +58,8 @@ def frame(tickers, start, adjusted=False, dividends=True, now=None, alpaca=None)
         for t in eq:
             df[("Dividends", t)] = pd.Series(dv.get(t, {}), dtype=float).reindex(df.index).fillna(0.0)
     if "^IRX" in tickers:
-        df[("Close", "^IRX")] = fred_dtb3(start).reindex(df.index, method="ffill")
+        df[("Close", "^IRX")] = fred_dtb3(start).reindex(df.index)   # raw: NaN on days without an observation, so the
+                                                                     # observation date and age stay visible (2026-11-02)
     df.columns = pd.MultiIndex.from_tuples(df.columns)
     df.index = pd.to_datetime(df.index).normalize()
     return df

@@ -68,11 +68,20 @@ def alerts_today(registry, market, now):
                if r["payload"]["market"] == market and r["payload"].get("alerted") and r["payload"]["ny_date"] == day)
 
 
-def record(registry, cond, market, payload, idem, now, cfg, title, priority, fields, capped=True):
-    """Record the trigger (always) and queue an alert unless the market's daily cap is reached."""
+def in_reopen_grace(now, cfg):
+    """True within `reopen_grace_minutes` after the weekly FX reopen (Sunday 17:00 New York)."""
+    ny = now.astimezone(NY)
+    if ny.weekday() != 6:
+        return False
+    opened = ny.replace(hour=17, minute=0, second=0, microsecond=0)
+    return opened <= ny < opened + timedelta(minutes=cfg.get("reopen_grace_minutes", 0))
+
+
+def record(registry, cond, market, payload, idem, now, cfg, title, priority, fields, capped=True, quiet=False):
+    """Record the trigger (always) and queue an alert unless the market's daily cap is reached (or `quiet`)."""
     if registry.get_by_key(idem):
         return False
-    alerted = not capped or alerts_today(registry, market, now) < cfg["max_per_market_per_day"]
+    alerted = not quiet and (not capped or alerts_today(registry, market, now) < cfg["max_per_market_per_day"])
     registry.append("market_watch", {"condition": cond, "version": VERSION, "market": market, "alerted": alerted,
                                      "ny_date": now.astimezone(NY).date().isoformat(), **payload}, idem_key=idem, now=now)
     if alerted:
@@ -115,13 +124,26 @@ def run(registry, now, bars, snapshot, events_store, cfg):
         down = (fresh in ("STALE", "UNAVAILABLE") and o.get("session_open")) or (st != "DATA OK" and o.get("session_open"))
         recs = [r["payload"] for r in registry.records("market_watch") if r["payload"]["condition"] == "W005" and r["payload"]["market"] == market]
         was_down = bool(recs) and recs[-1]["state"] == "OUTAGE"
+        grace = in_reopen_grace(now, cfg) and spec != "gold"          # FX quotes restart after the Sunday 17:00 ET reopen
+        fields5 = lambda state: {**base, "class": "RISK/SYSTEM ALERT", "event_time_et": et(now), "trigger": "W005 v%s" % VERSION,
+                                 "why_sent": "data source %s" % state.lower()}
         if down != was_down:
             state = "OUTAGE" if down else "RECOVERED"
-            out.append(record(registry, "W005", market, {"state": state, "freshness": fresh, "specialist_status": st},
+            # owner decision 2026-11-01: inside the reopen grace, a stale-price outage is recorded but not alerted; its
+            # recovery is then silent too. Still down when the grace ends -> alerted then (below). HIGH alerts unaffected.
+            quiet = (state == "OUTAGE" and grace and fresh in ("STALE", "UNAVAILABLE")) or \
+                    (state == "RECOVERED" and recs and recs[-1].get("grace") and not recs[-1].get("alerted"))
+            out.append(record(registry, "W005", market, {"state": state, "freshness": fresh, "specialist_status": st,
+                                                          "grace": bool(quiet and state == "OUTAGE")},
                               "W005:%s:%s:%s" % (market, state, now.astimezone(timezone.utc).strftime("%Y%m%dT%H%M")), now, cfg,
-                              "%s data %s (%s, %s)" % (market, state.lower(), fresh, st), "NORMAL",
-                              {**base, "class": "RISK/SYSTEM ALERT", "event_time_et": et(now), "trigger": "W005 v%s" % VERSION,
-                               "why_sent": "data source %s" % state.lower()}, capped=False))
+                              "%s data %s (%s, %s)" % (market, state.lower(), fresh, st), "NORMAL", fields5(state),
+                              capped=False, quiet=quiet))
+        elif down and recs and recs[-1].get("grace") and not recs[-1].get("alerted") and not grace:
+            out.append(record(registry, "W005", market, {"state": "OUTAGE", "freshness": fresh, "specialist_status": st,
+                                                          "after_grace": True},
+                              "W005:%s:OUTAGE-after-grace:%s" % (market, now.astimezone(timezone.utc).strftime("%Y%m%dT%H%M")), now, cfg,
+                              "%s data outage continues after the reopen grace (%s, %s)" % (market, fresh, st), "NORMAL",
+                              fields5("OUTAGE"), capped=False))
     horizon = now + timedelta(hours=cfg["event_horizon_hours"])
     for eid, e in (events_store.get("events") or {}).items():
         if e.get("status") != "SCHEDULED" or not any(k.lower() in e.get("title", "").lower() for k in HIGH_IMPACT):

@@ -39,3 +39,13 @@ def test_v03_amendment_is_unchanged_and_sources_are_read_only():
     assert CFG["sources"]["oanda"]["host"] == "https://api-fxpractice.oanda.com"
     assert CFG["sources"]["alpaca"]["host"] == "https://data.alpaca.markets"
     assert CFG["late_detection_minutes"] == 30 and CFG["f002_first_month_end"] == "2026-10-30"
+
+
+def test_v04_amendment_is_unchanged_and_matches_the_config_thresholds():
+    a = CFG["amendments"]["v0.4"]
+    assert hashlib.sha256((PROJECT_ROOT / a["document"]).read_bytes()).hexdigest() == a["sha256"]
+    sr = CFG["financing"]["series"]
+    assert (sr["usd"]["id"], sr["usd"]["valid_max"], sr["usd"]["carry_max"], sr["usd"]["age_unit"]) == ("DTB3", 3, 5, "us_business_days")
+    assert (sr["jpy"]["id"], sr["jpy"]["valid_max"], sr["jpy"]["carry_max"], sr["jpy"]["age_unit"]) == ("IRSTCI01JPM156N", 95, 125, "calendar_days")
+    assert CFG["financing"]["policy"] == "v1"
+    assert CFG["costs"]["base"]["financing_admin_fee_annual"] == 0.01 and CFG["costs"]["stress"]["financing_admin_fee_annual"] == 0.015

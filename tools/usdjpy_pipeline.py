@@ -63,7 +63,19 @@ def fetch_v03(now):
 
 
 def fetch_rates(now, st):
-    """US 3-month T-bill (FRED DTB3) and Japan call money (FRED IRSTCI01JPM156N), annual decimals; cached per day."""
+    """Financing-rate cache (src/live_usdjpy/financing.py): FRED DTB3 and FRED IRSTCI01JPM156N with strict validation;
+    only successful observations are cached; after a failure, at most one retry per `retry_minutes`. Returns the
+    cache (passed to the simulator, which resolves each roll's own rates). Policy "legacy" keeps the old tuple form."""
+    from src.live_usdjpy import financing as FIN
+    if CFG.get("financing", {}).get("policy") == "legacy":
+        return _legacy_rates(now, st)
+    fin = st.setdefault("financing", {})
+    st["financing_refresh"] = FIN.refresh(fin, now, CFG)
+    return fin
+
+
+def _legacy_rates(now, st):
+    """Pre-2026-11-02 behaviour, kept only for the rollback flag (a failed fetch is cached for the UTC day)."""
     day = now.date().isoformat()
     if st.get("rates_day") == day and st.get("rates"):
         return {k: tuple(v) for k, v in st["rates"].items()}
@@ -162,7 +174,7 @@ def run(demo=False):
             pf = PF.check(now, reg, snap, bars, events, st, CFG["preflight"], fetch_error=fetch_error,
                           kill_on=G.kill_flag_path(BASE).exists(),
                           backup_problems=[] if demo else BK.problems(reg, now, CFG["backup"], ROOT),
-                          channels_configured=any(ch.configured() for ch in channels))
+                          channels_configured=any(ch.configured() for ch in channels), live_cfg=CFG)
             PF.record(reg, now, pf, CFG["preflight"], "%s:%s" % (mode, now.strftime("%Y%m%dT%H%M")))
             done.append("preflight %s" % PF.summary(pf)[:300])
             st["last_preflight"] = {"verdict": pf["verdict"], "at_utc": pf["at_utc"], "summary": PF.summary(pf)[:600]}
@@ -274,7 +286,7 @@ def main(a):
         bars, snap = fetch_v03(now)
         reg = registry(demo)
         out = S.run_scan(reg, now, S.ScanInputs(snapshot=snap, bars=bars, events_store=events, mode="demo" if demo else "forward",
-                                                rates=fetch_rates(now, {}), fx_prefiltered=True), CFG, BASE)
+                                                rates=fetch_rates(now, load_state(demo)), fx_prefiltered=True), CFG, BASE)
         reg.close()
         print("SCAN %s: %s" % ("DEMO" if demo else "FORWARD", json.dumps(out, default=str)))
     elif cmd == "kill":

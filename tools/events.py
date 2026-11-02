@@ -303,28 +303,16 @@ def collect(store, now):
 
 
 def reactions(store, now):
-    """Indicative reactions for events published in the last 7 days (Yahoo keeps 1-minute history about 7 days)."""
-    import yfinance as yf
-    cand = [e for e in store["events"].values() if e["status"] == "PUBLISHED" and
-            (e.get("published_time_source") or e.get("scheduled_time_utc")) and
-            now - datetime.fromisoformat(e.get("published_time_source") or e["scheduled_time_utc"]) < timedelta(days=7)
-            and any(r.get("status") != "COMPLETE" for r in e["market_reaction"].values()) | (not e["market_reaction"])]
-    if not cand:
-        return
-    bars = {}
-    for mk, (sym, _) in YAHOO.items():
-        try:
-            h = yf.Ticker(sym).history(period="7d", interval="1m")
-            bars[mk] = h["Close"].tz_convert("UTC") if len(h) else None
-        except Exception:
-            bars[mk] = None
-    for e in cand:
-        t0 = datetime.fromisoformat(e.get("published_time_source") or e["scheduled_time_utc"])
-        for mk in e["markets_affected"]:
-            sym, pip = YAHOO[mk]
-            r = E.reaction(bars.get(mk), t0, now, pip)
-            r["instrument"] = sym + (" (COMEX futures, context)" if mk == "gold" else " (indicative)")
-            e["market_reaction"][mk] = r
+    """Market reactions to published events: UNKNOWN (owner decision 2026-11-01). The Yahoo 1-minute download that
+    produced the earlier "indicative reactions" was removed: Yahoo's terms prohibit automated collection. A compliant
+    intraday source (e.g. OANDA practice candles, already read-only allow-listed for USD/JPY and GBP/USD) is a separate
+    proposal; no new endpoint was added. Reactions already recorded are kept unchanged."""
+    for e in store["events"].values():
+        if e["status"] != "PUBLISHED":
+            continue
+        for mk in e.get("markets_affected") or []:
+            if mk not in e["market_reaction"]:
+                e["market_reaction"][mk] = {"status": "UNKNOWN", "note": "no licensed intraday source configured (Yahoo removed 2026-11-01)"}
 
 
 def report(store, now):

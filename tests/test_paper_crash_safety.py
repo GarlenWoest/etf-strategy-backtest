@@ -62,7 +62,7 @@ def run_days(p, monkeypatch, days=DAYS):
 
 
 def files(p):
-    return {n: (p.dir / n).read_bytes() for n in PB.APPEND_FILES}
+    return {n: (p.dir / n).read_bytes() if (p.dir / n).exists() else b"" for n in PB.APPEND_FILES}   # files created on demand
 
 
 def books(p):

@@ -35,21 +35,29 @@ def pair_pnl(direction, notional, s1, s2, c, fin_days, r_usd, r_jpy, fee):
         jpy = -notional * s1 * buy + notional * s2 * sell
     else:
         jpy = notional * s1 * sell - notional * s2 * buy
-    fin = notional * (direction * ((r_usd or 0) * 365 / 360 - (r_jpy or 0)) - fee) * fin_days / 365.0
+    if r_usd is None or r_jpy is None:             # a missing rate is never 0%: financing excluded (the caller labels it)
+        return jpy / s2
+    fin = notional * (direction * (r_usd * 365 / 360 - r_jpy) - fee) * fin_days / 365.0
     return jpy / s2 + fin
 
 
 def financing_for(registry, rule, entry_utc, exit_utc):
-    acc = [r["payload"] for r in registry.records("fill") if r["payload"]["rule"] == rule and r["payload"]["type"] == "financing"
-           and entry_utc < datetime.fromisoformat(r["payload"]["roll_et"]).astimezone(timezone.utc).isoformat() <= exit_utc]
+    inwin = lambda p: entry_utc < datetime.fromisoformat(p["roll_et"]).astimezone(timezone.utc).isoformat() <= exit_utc
+    fills = [r["payload"] for r in registry.records("fill") if r["payload"]["rule"] == rule and "roll_et" in r["payload"]
+             and inwin(r["payload"])]
+    acc = [p for p in fills if p["type"] in ("financing", "financing_trueup")]
+    pending = [p for p in fills if p["type"] == "financing_unresolved" and p["roll_et"] not in
+               {a["roll_et"] for a in acc if a["type"] == "financing_trueup"}]
     days = sum(a["days"] for a in acc)
     usd = sum(a["usd_interest"] + 0.0 for a in acc)
     fee = sum(a["admin_fee_usd"] for a in acc)
     jpy = sum(a["jpy_interest"] for a in acc)
-    ru = next((a["r_usd"] for a in acc if a["r_usd"] is not None), None)
-    rj = next((a["r_jpy"] for a in acc if a["r_jpy"] is not None), None)
+    known = bool(acc) and not pending and all(a.get("r_usd") is not None and a.get("r_jpy") is not None for a in acc)
+    # baselines use the day-weighted average of the SAME per-roll rates the ledger booked (never a default of 0)
+    ru = sum(a["r_usd"] * a["days"] for a in acc) / days if known and days else None
+    rj = sum(a["r_jpy"] * a["days"] for a in acc) / days if known and days else None
     return {"days": days, "usd_interest": usd, "jpy_interest": jpy, "admin_fee_usd": fee, "r_usd": ru, "r_jpy": rj,
-            "known": ru is not None and rj is not None}
+            "known": known, "unresolved_rolls": len(pending)}
 
 
 def daily_closes(registry):
@@ -123,7 +131,8 @@ def score_closed(registry, cfg, now):
         sc = {"type": "scored", "rule": rule, "setup_id": p["setup_id"], "bar_date": p["bar_date"], "direction": d,
               "entry_utc": p["entry_utc"], "exit_utc": p["exit_utc"], "exit_reason": p["exit_reason"],
               "net_return_base": net_base, "net_return_stress": net_stress,
-              "financing": {**fin, "label": "estimated, unverified" if fin["known"] else "UNKNOWN rates: fee only"},
+              "financing": {**fin, "label": "estimated, unverified" if fin["known"] else
+                            "UNKNOWN or UNRESOLVED rates: baselines exclude financing (never booked as 0%)"},
               "costs_usd_base": base["one_way"] * 2 * N,
               "baselines": {"cash": 0.0, "always_long": bl(1), "historical_sample_mean": bl(cfg["baselines"]["historical_sample_mean"]["sign"]),
                             "simple_trend": bl(trend_dir) if trend_dir else None, "placebo_F001": plc[0], "placebo_n": plc[1]},

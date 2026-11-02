@@ -35,7 +35,7 @@ def nyse_trading_day(d):
 
 
 def check(now, registry, snapshot, bars, events_store, state, cfg, fetch_error=None, kill_on=False,
-          backup_problems=(), channels_configured=None):
+          backup_problems=(), channels_configured=None, live_cfg=None):
     """Returns {"verdict", "blocks": [...], "checks": [{"check", "status", "detail", "blocks"}]}."""
     out = []
 
@@ -158,6 +158,18 @@ def check(now, registry, snapshot, bars, events_store, state, cfg, fetch_error=N
         add("notifications", "DEGRADED" if stuck else "OK",
             "%d notification(s) not accepted by any provider after %d min" % (stuck, cfg["notification_stuck_minutes"])
             if stuck else "outbox clear")
+
+    # 9b. financing rates (owner decision 2026-11-01: DEGRADED only; financing never blocks anything)
+    if live_cfg and live_cfg.get("financing", {}).get("policy") != "legacy":
+        from . import financing as FIN
+        st_ = FIN.series_status((state or {}).get("financing"), now, live_cfg)
+        bad_ = ["%s %s%s" % (r["series"], r["state"], " (last fetch failed: %s)" % r["last_error"] if r.get("last_error") else "")
+                for r in st_.values() if r["state"] not in ("VALID", "VALID_ZERO") or r.get("last_error")]
+        pend = sum(len(__import__("src.live_usdjpy.paper", fromlist=["x"]).unresolved(registry, rule)) for rule in live_cfg["rules"])
+        if pend:
+            bad_.append("%d UNRESOLVED financing roll(s) awaiting TRUE-UP" % pend)
+        add("financing rates", "DEGRADED" if bad_ else "OK", "; ".join(bad_) if bad_ else
+            "; ".join("%s %s (%s, age %s)" % (r["series"], r["state"], r["obs_date"], r["age"]) for r in st_.values()))
 
     # 10. backup health
     if backup_problems:

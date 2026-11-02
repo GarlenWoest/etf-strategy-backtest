@@ -279,6 +279,7 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
   instrument: {symbol: USD_JPY, source: "OANDA v20 practice pricing mid (indicative practice quote; not an executed fill)", spy_symbol: SPY, spy_source: "Alpaca market data IEX daily bars (raw)", superseded: "v0.2 Yahoo JPY=X (never ran)"}
   amendments:
     v0.3: {document: research/USDJPY_FORWARD_TEST_PREREG_v0.3_AMENDMENT.md, sha256: cf1b03cc70b91aaac8bb03a5727dade598f17038083e2e8928646485a1dfcbcc, frozen_commit: 377567b, scope: "data sources + start/catch-up rule only; parameters unchanged; frozen before the first forward scan"}
+    v0.4: {document: research/USDJPY_FORWARD_TEST_PREREG_v0.4_AMENDMENT.md, sha256: 41e2e561d841c58c9acbea9403fdedd409626bed4c3e090fd134ef92bbb794de, frozen_commit: d85b8fd, scope: "financing rate resolution only (canonical series, age limits, carry-forward band, UNRESOLVED + TRUE-UP); parameters unchanged; frozen before any financing accrued (F002-2026-10 entered 2026-11-01 19:02 EST, first roll 2026-11-02 17:00 EST)"}
   sources:
     oanda: {host: "https://api-fxpractice.oanda.com", endpoints: ["pricing", "candles (D, 17:00 New York, mid, complete only)"], instruments: [USD_JPY, GBP_USD], keychain: [trading-research-oanda-token, trading-research-oanda-account]}
     alpaca: {host: "https://data.alpaca.markets", endpoints: ["stocks/quotes/latest", "stocks/bars (1Day, IEX, raw)"], symbols: [SPY, GLD], keychain: [trading-research-alpaca-key-id, trading-research-alpaca-secret]}
@@ -308,6 +309,15 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     drawdown_close_all_stop: -0.05
     stale_data: "hard block: entry needs USD/JPY LIVE (<=180 s) and specialist status DATA OK"
     event_blackout_minutes: {before: 60, after: 30}
+  financing:                        # rate integrity: compliance fix (pre-registration section 4) + amendment v0.4 (2026-11-02)
+    policy: v1                                # v1 = never 0% for a missing rate, per-roll resolution, UNRESOLVED + TRUE-UP; "legacy" = rollback
+    refresh_hours: 6                          # refetch a series when its last success is older than this
+    retry_minutes: 15                         # after a failed attempt, at most one retry per this many minutes
+    series:
+      usd: {id: DTB3, currency: USD, type: "3-month T-bill, secondary market, discount basis (FRED, Fed H.15)",
+            age_unit: us_business_days, valid_max: 3, carry_max: 5, keep: 60}
+      jpy: {id: IRSTCI01JPM156N, currency: JPY, type: "call money / interbank immediate rate, monthly average (FRED mirror of OECD MEI)",
+            age_unit: calendar_days, valid_max: 95, carry_max: 125, keep: 24}
   # --- operational settings (not part of the frozen test; may change with a ledger note) ---
   market_watch:
     version: "1.0"
@@ -318,6 +328,7 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     regime_ratio_down: 1.0
     regime_lookback: 250
     event_horizon_hours: 24         # W003
+    reopen_grace_minutes: 30        # owner decision 2026-11-01: W005 stale-price outages within 30 min after the Sunday 17:00 ET reopen are recorded, not alerted, if prices recover; still down after -> alerted
     markets: {USDJPY: "USD_JPY (OANDA practice)", GOLD: "GLD (Alpaca IEX)", GBPUSD: "GBP_USD (OANDA practice)"}   # labels; Yahoo symbols until 2026-10-30
   preflight:                        # Phase D readiness check before every scan (operational; not part of the frozen test)
     clock_offset_limit_s: 5                   # local vs venue clock (HTTP Date, 1 s resolution) beyond this -> DEGRADED

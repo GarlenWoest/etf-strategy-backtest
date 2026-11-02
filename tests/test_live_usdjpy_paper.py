@@ -71,11 +71,17 @@ def test_financing_over_a_wednesday_triple_roll(reg):
     assert len([r for r in reg.records("fill") if r["payload"]["type"] == "financing"]) == 1
 
 
-def test_unknown_rates_accrue_only_the_fee_and_say_unknown(reg):
+def test_unknown_rates_are_unresolved_never_booked_as_zero(reg):
+    """Compliance fix 2026-11-02 (was: unknown rates accrued 0% interest and only the fee): nothing is booked, the roll is
+    recorded UNRESOLVED with the legs at the roll, and balances are untouched."""
     enter(reg, now=datetime(2026, 11, 10, 20, 0, tzinfo=timezone.utc))
+    before = PP.state(reg, "F001", CFG)
     PP.manage(reg, CFG, datetime(2026, 11, 10, 23, 0, tzinfo=timezone.utc), 150.0, {}, "s2")
-    a = [r["payload"] for r in reg.records("fill") if r["payload"]["type"] == "financing"][0]
-    assert a["usd_interest"] == 0 and a["jpy_interest"] == 0 and a["r_usd_info"] == "UNKNOWN" and a["admin_fee_usd"] > 0
+    assert [r for r in reg.records("fill") if r["payload"]["type"] == "financing"] == []
+    u = [r["payload"] for r in reg.records("fill") if r["payload"]["type"] == "financing_unresolved"][0]
+    assert u["usd_pos_at_roll"] == before["usd_pos"] and "MISSING" in str(u["r_usd_detail"]) and "never 0%" in u["note"]
+    after = PP.state(reg, "F001", CFG)
+    assert (after["cash"], after["usd_pos"], after["jpy"]) == (before["cash"], before["usd_pos"], before["jpy"])
 
 
 def test_invalidation_and_expiry_exits_are_scan_based(reg):

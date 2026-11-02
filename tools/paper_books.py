@@ -58,7 +58,8 @@ COST = {"unlev": 0.0007, "lev": 0.0010}
 LEVERAGE = {"UGL": 2.0, "AGQ": 2.0, "UCO": 2.0, "UPRO": 3.0, "TQQQ": 3.0, "TMF": 3.0}
 MIN_HOLD = 5
 BOOKS = ["A", "B", "SPY", "MIX"]
-APPEND_FILES = ("values.csv", "trades.csv", "book_b_journal.md", "journal_hashes.csv")
+APPEND_FILES = ("values.csv", "trades.csv", "book_b_journal.md", "journal_hashes.csv", "interest_unresolved.csv")
+TBILL = {"valid_max": 3, "carry_max": 5}      # US business days; same policy as the forward ledger (2026-11-02)
 
 
 def cost(t):
@@ -296,7 +297,9 @@ def update(p, today):
     df = download(list(need) + ["^IRX"], (start - timedelta(days=10)).isoformat())
     O, C = df["Open"], df["Close"]
     D = df["Dividends"] if "Dividends" in df.columns.get_level_values(0) else None
-    irx = C["^IRX"].ffill()
+    irx_raw = C["^IRX"]
+    irx = irx_raw.ffill()
+    notes += tbill_true_ups(p, s, irx_raw, today)
     days = [d.date() for d in C.index if start <= d.date() <= today and is_trading_day(d.date())]
     if is_trading_day(today) and today >= start and pd.Timestamp(today) not in C.index:      # fix P1 (approved 10-26)
         notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] no daily bar for %s yet; values not updated for that day; "
@@ -313,11 +316,18 @@ def update(p, today):
             notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] no close for %s yet; values not updated" % d)
             break
         prev = C.index[C.index < ts]
-        rate = float(irx.loc[prev[-1]]) / 100 / 252 if len(prev) else 0.0
+        rate, tb = tbill_rate(irx_raw, prev[-1], d) if len(prev) else (0.0, {"state": "NOT NEEDED (first day)"})
+        if rate is None and d > start:                         # never 0% for a missing or stale T-bill rate
+            p.append_csv(p.dir / "interest_unresolved.csv", ["day", "kind", "state", "detail", "cash_by_book", "rate_daily", "logged_at_et"],
+                         {"day": d.isoformat(), "kind": "UNRESOLVED", "state": tb["state"], "detail": tb["reason"],
+                          "cash_by_book": json.dumps({tag: bk["cash"] for tag, bk in _books(s)}), "rate_daily": "",
+                          "logged_at_et": now_et().strftime("%Y-%m-%d %H:%M ET")})
+            notes.append("NOTIFY: [PAPER, FICTIONAL MONEY] cash interest for %s UNRESOLVED (%s); not booked, never as 0%%; "
+                         "a TRUE-UP follows when the T-bill rate is available" % (d, tb["reason"]))
         all_books = [("A:V122", s["books"]["A"]["V122"]), ("A:V074", s["books"]["A"]["V074"]), ("B", s["books"]["B"]),
                      ("SPY", s["books"]["SPY"]), ("MIX", s["books"]["MIX"])]
         for tag, bk in all_books:                                   # interest, then dividends (held at prior close)
-            if d > start:
+            if d > start and rate is not None:
                 bk["cash"] *= 1 + rate
             if D is not None:
                 for t, sh in bk["shares"].items():
@@ -378,7 +388,7 @@ def update(p, today):
                 "A_V122": value_of(s["books"]["A"]["V122"], closes), "A_V074": value_of(s["books"]["A"]["V074"], closes),
                 "B": value_of(s["books"]["B"], closes), "SPY": value_of(s["books"]["SPY"], closes),
                 "MIX": value_of(s["books"]["MIX"], closes)}
-        save_inputs(p, d, need, O, C, Cf, D, rate)
+        save_inputs(p, d, need, O, C, Cf, D, rate, tb)
         for row in trade_log:                                       # this day's fills, then its values, then commit
             p.append_csv(p.trades, list(row), row)
         n_fills += len(trade_log)
@@ -420,12 +430,73 @@ def update(p, today):
     return notes
 
 
-def save_inputs(p, d, need, O, C, Cf, D, rate):
+def _books(s):
+    return [("A:V122", s["books"]["A"]["V122"]), ("A:V074", s["books"]["A"]["V074"]), ("B", s["books"]["B"]),
+            ("SPY", s["books"]["SPY"]), ("MIX", s["books"]["MIX"])]
+
+
+def tbill_rate(irx_raw, prev_day, d):
+    """Daily cash rate for trading day `d` from the T-bill observation dated on or before the prior trading day, with
+    its original date and age (US business days to `d`). VALID <= 3, LATE (carried forward, flagged) 4-5, otherwise
+    UNRESOLVED (None, never 0%). Returns (rate or None, detail)."""
+    import sys as _s
+    _s.path.insert(0, str(ROOT))
+    from src import clock as K
+    obs = irx_raw.loc[:prev_day].dropna()
+    if obs.empty:
+        return None, {"state": "MISSING", "reason": "no T-bill observation on or before %s" % prev_day.date()}
+    od = obs.index[-1].date()
+    hol = set(K.us_board_holidays(od.year)) | set(K.us_board_holidays(d.year))
+    age, x = 0, od
+    while x < d:
+        x += timedelta(days=1)
+        if x.weekday() < 5 and x not in hol:
+            age += 1
+    v = float(obs.iloc[-1])
+    if not np.isfinite(v):
+        return None, {"state": "INVALID", "reason": "non-finite T-bill value dated %s" % od}
+    st = "VALID" if age <= TBILL["valid_max"] else ("LATE" if age <= TBILL["carry_max"] else "STALE")
+    det = {"state": st, "obs_date": od.isoformat(), "age_us_business_days": age, "carried_forward": st == "LATE",
+           "reason": None if st != "STALE" else "T-bill observation %s is %d US business days old (limit %d)" % (od, age, TBILL["carry_max"])}
+    return (v / 100 / 252 if st != "STALE" else None), det
+
+
+def tbill_true_ups(p, s, irx_raw, today):
+    """Book UNRESOLVED cash-interest days whose T-bill rate is now acceptable: each book's cash recorded for that day x
+    the day's rate, credited now, logged as a TRUE-UP row (the UNRESOLVED row is never edited)."""
+    f = p.dir / "interest_unresolved.csv"
+    if not f.exists():
+        return []
+    rows = [r for r in csv.DictReader(l for l in open(f) if not l.startswith("#"))]
+    done = {r["day"] for r in rows if r["kind"] == "TRUE-UP"}
+    out = []
+    for r in rows:
+        if r["kind"] != "UNRESOLVED" or r["day"] in done:
+            continue
+        d = date.fromisoformat(r["day"])
+        prev = irx_raw.index[irx_raw.index < pd.Timestamp(d)]
+        if not len(prev):
+            continue
+        rate, tb = tbill_rate(irx_raw, prev[-1], d)
+        if rate is None:
+            continue
+        cash = json.loads(r["cash_by_book"])
+        for tag, bk in _books(s):
+            bk["cash"] += cash.get(tag, 0.0) * rate
+        p.append_csv(f, ["day", "kind", "state", "detail", "cash_by_book", "rate_daily", "logged_at_et"],
+                     {"day": r["day"], "kind": "TRUE-UP", "state": tb["state"], "detail": json.dumps(tb), "cash_by_book": r["cash_by_book"],
+                      "rate_daily": rate, "logged_at_et": now_et().strftime("%Y-%m-%d %H:%M ET")})
+        out.append("NOTIFY: [PAPER, FICTIONAL MONEY] cash-interest TRUE-UP booked for %s (T-bill %s)" % (r["day"], tb["obs_date"]))
+        done.add(r["day"])
+    return out
+
+
+def save_inputs(p, d, need, O, C, Cf, D, rate, tb=None):
     """Keep the prices this day used, as received, so any later replay is exact (Yahoo revises past bars)."""
     ts = pd.Timestamp(d)
     num = lambda x: None if x is None or np.isnan(x) else float(x)
     rec = {"label": LABEL, "date": d.isoformat(), "saved_at_et": now_et().strftime("%Y-%m-%d %H:%M:%S ET"),
-           "source": SOURCE, "tbill_daily_rate": rate,
+           "source": SOURCE, "tbill_daily_rate": rate, "tbill": tb,
            "open": {t: num(O.loc[ts, t]) for t in sorted(need)}, "close": {t: num(C.loc[ts, t]) for t in sorted(need)},
            "close_ffilled": {t: num(Cf.loc[ts, t]) for t in sorted(need)},
            "dividends": {t: float(D[t].get(ts, 0.0)) for t in sorted(need) if D is not None and t in D.columns
