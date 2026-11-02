@@ -12,6 +12,7 @@ asserts this. Credentials come from the macOS Keychain at call time (notify.secr
 in records or returned. Errors report only the exception type and HTTP status.
 Prices are the venues' indicative practice/IEX data: never presented as executable fills.
 """
+import math
 import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
@@ -224,6 +225,28 @@ def cash_dividends(alpaca, symbols, start, end):
     return out
 
 
+SIP_DELAY_S = 16 * 60
+
+
+def sip_last_minute(alpaca, symbol, now):
+    """Latest consolidated 1-minute bar at least 16 minutes old (free-plan SIP rule): {close, time_utc (bar end),
+    retrieved_utc} or None. Read-only GET to the allow-listed bars endpoint."""
+    end = now - timedelta(seconds=SIP_DELAY_S)
+    params = {"symbols": symbol, "timeframe": "1Min", "start": (now - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "end": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "feed": "sip", "adjustment": "raw", "limit": 200}
+    meta = {}
+    j = _get(ALPACA_HOST, "/v2/stocks/bars", params, alpaca._h(), alpaca.http_get, meta=meta)
+    bars = (j.get("bars") or {}).get(symbol) or []
+    if not bars:
+        return None
+    b = bars[-1]
+    t = _ts(b["t"]) + timedelta(minutes=1)                       # bar timestamps are bar starts
+    c = float(b["c"])
+    if not (c > 0 and math.isfinite(c)):
+        return None
+    return {"close": c, "time_utc": t, "retrieved_utc": meta.get("retrieved_utc") or datetime.now(timezone.utc)}
+
+
 def _ts(s):
     s = s.replace("Z", "+00:00")
     m = re.match(r"^(.*\.\d{6})\d*(\+00:00)$", s)
@@ -270,29 +293,30 @@ def snapshot(now, oanda=None, alpaca=None, fx_bars=None, gld_bars=None, cfg_inte
         o["realized_vol_20d_annualised"] = vol
         status[spec] = MI.specialist_status(o["freshness"], vol, cfg_intel["specialist_status"])
         obs.append(o)
-    try:
-        q = (alpaca or Alpaca()).latest_quotes(("GLD",)).get("GLD")
-        gerr = None
-    except Exception as ex:
-        q, gerr = None, str(ex)
-    g = {"specialist": "gold", "role": "primary", "source": "Alpaca market data (IEX feed)", "symbol": "GLD",
-         "quote_type": "IEX quote mid; GLD trades 09:30-16:00 ET; not spot gold", "session": "nyse",
-         "session_open": MI.nyse_open(now)}
-    if q:
-        tm = timing(q.get("time_utc"), q)
-        g.update(quote_bid=q["bid"], quote_ask=q["ask"], quote_problems=q["quote_problems"], quote_ts_utc=tm["quote_ts_utc"],
-                 retrieved_utc=tm["retrieved_utc"], clock_note=tm["clock_note"])
-    if q and q.get("mid") and MI.nyse_open(now):
-        fr, _, note = MI.freshness_intraday(q["time_utc"], q["retrieved_utc"], fr_ex, "nyse")
-        g.update(last=q["mid"], bid=q["bid"], ask=q["ask"], spread=q["spread"], source_ts_utc=tm["quote_ts_utc"],
-                 age_s=tm["age_s"], freshness=fr, freshness_note=note)
+    # GLD (observation only, not part of the forward trial): consolidated SIP 1-minute bars, which Alpaca's free plan
+    # serves only >= 15 minutes after the fact -> labelled DELAYED (owner request 2026-11-01). Outside NYSE hours the
+    # last completed daily close, labelled CLOSED_LAST_PRICE. No bid/ask from bars: spread UNKNOWN.
+    g = {"specialist": "gold", "role": "primary", "source": "Alpaca market data, consolidated SIP feed (>= 15 min delayed)",
+         "symbol": "GLD", "quote_type": "last 1-minute SIP bar close; GLD trades 09:30-16:00 ET; not spot gold; INFORMATION ONLY",
+         "session": "nyse", "session_open": MI.nyse_open(now)}
+    gerr, bar = None, None
+    if MI.nyse_open(now):
+        try:
+            bar = sip_last_minute(alpaca or Alpaca(), "GLD", now)
+        except Exception as ex:
+            gerr = str(ex)
+    if bar:
+        fr, _, note = MI.freshness_intraday(bar["time_utc"], bar["retrieved_utc"], fr_ex, "nyse", declared_delay_s=SIP_DELAY_S)
+        g.update(last=bar["close"], bid=None, ask=None, spread=None, source_ts_utc=bar["time_utc"].isoformat(),
+                 retrieved_utc=bar["retrieved_utc"].isoformat(), age_s=round((bar["retrieved_utc"] - bar["time_utc"]).total_seconds(), 1),
+                 freshness=fr, freshness_note="%s; SIP data is >= 15 min old on the free plan" % note)
     elif gld_bars is not None and len(gld_bars) and not MI.nyse_open(now):
         # closed market (or a one-sided after-hours IEX quote): the last completed IEX daily close, labelled as such
         d = gld_bars.index[-1].date()
         close_t = datetime.combine(d, datetime.min.time().replace(hour=16), tzinfo=NY)
         g.update(last=float(gld_bars.iloc[-1]), bid=None, ask=None, source_ts_utc=close_t.astimezone(timezone.utc).isoformat(),
                  age_s=(now - close_t).total_seconds(), freshness="CLOSED_LAST_PRICE",
-                 freshness_note="NYSE closed: last IEX daily close %s (not a live quote)" % d)
+                 freshness_note="NYSE closed: last daily close %s (consolidated SIP; not a live quote)" % d)
     else:
         g.update(last=None, freshness="UNAVAILABLE", error=gerr or "no two-sided IEX quote", age_s=None)
     gv = MI.realized_vol(gld_bars, 20, 21) if gld_bars is not None and len(gld_bars) else None

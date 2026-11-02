@@ -102,6 +102,8 @@ def is_phone(payload):
     if payload.get("kind") == "digest":
         return True, "daily digest"
     c = f.get("class")
+    if c == "OFFICIAL RELEASE" and f.get("market") not in (None, "USDJPY"):
+        return False, "OFFICIAL RELEASE for an observation market: logged for the digest"
     if c in ("TEST", "OFFICIAL RELEASE", "PAPER POSITION UPDATE"):
         return True, c
     if c in ("EXPERIMENTAL IDEA (shadow ledger)", "APPROVED PAPER CANDIDATE"):

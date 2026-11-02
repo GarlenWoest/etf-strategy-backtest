@@ -57,7 +57,9 @@ def fetch_v03(now):
     from src.live_usdjpy import sources as SR
     o, a = SR.Oanda(), SR.Alpaca()
     fx = {"USD_JPY": o.daily("USD_JPY"), "GBP_USD": o.daily("GBP_USD")}
-    eq = a.daily(("SPY", "GLD"), now=now)
+    eq = a.daily(("SPY",), now=now)                                 # SPY: IEX, as frozen in v0.3 (F001's second leg)
+    eq["GLD"] = SR.daily_ohlc(a, ["GLD"], (now - timedelta(days=620)).date(), (now - timedelta(minutes=20)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"), feed="sip")["GLD"]["close"]           # GLD: observation only, consolidated SIP (2026-11-01)
     snap = SR.snapshot(now, oanda=o, alpaca=a, fx_bars=fx, gld_bars=eq["GLD"])
     return {"USD_JPY": fx["USD_JPY"], "GBP_USD": fx["GBP_USD"], "SPY": eq["SPY"], "GLD": eq["GLD"]}, snap
 

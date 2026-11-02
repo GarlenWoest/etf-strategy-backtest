@@ -250,7 +250,8 @@ def status_page(registry, cfg, now, snapshot=None, base_dir=None, mode="forward"
         L.append("| none yet | | | |")
     watch = registry.records("market_watch")
     L += ["", "MARKET WATCH triggers recorded: %d (alerted %d)." % (len(watch), sum(1 for w in watch if w["payload"].get("alerted"))), ""]
-    L += readiness_section(registry) + tickets_section(registry) + notifications_section(registry, notifs, dl)
+    L += readiness_section(registry) + observation_section(registry, snapshot, now) + tickets_section(registry) + \
+        notifications_section(registry, notifs, dl)
     L += [
           "## Scorecard (forward test; shadow; indicative prices; costs and financing estimated, unverified)", ""]
     for rule, r in rows.items():
@@ -314,4 +315,24 @@ def notifications_section(registry, notifs, dl):
         ch = ", ".join(sorted({d["channel"] for d in ds if d["result"] == "sent"})) or "—"
         L.append("| %s | %s | %s | %s | %s |" % (LC.et(n["created_utc"]), n["payload"].get("priority"),
                                                  str(n["payload"].get("title", ""))[:70].replace("|", "/"), N.provider_status(registry, n["record_id"], ds), ch))
+    return L + [""]
+
+
+def observation_section(registry, snapshot, now):
+    """GBP/USD and gold (2026-11-01): INFORMATION ONLY. No rules, no tickets, no paper entries."""
+    obs = {o["specialist"]: o for o in (snapshot or {}).get("observations", []) if o.get("role") == "primary"}
+    status = (snapshot or {}).get("status") or {}
+    day = LC.et(now)[:10]
+    L = ["## Observation markets: GBP/USD and gold (INFORMATION ONLY: no rules, no tickets, no paper entries)", "",
+         "| Market | Source | Freshness | Status | Session | MARKET WATCH today | Official releases today |", "|---|---|---|---|---|---|---|"]
+    for spec, name, mk in (("gbpusd", "GBP/USD", "GBPUSD"), ("gold", "Gold (GLD reference; not spot gold)", "GOLD")):
+        o = obs.get(spec, {})
+        mw = [r["payload"]["condition"] for r in registry.records("market_watch")
+              if r["payload"].get("market") == mk and LC.et(r["created_utc"]).startswith(day)]
+        rel = [r["payload"]["title"] for r in registry.records("notification")
+               if (r["payload"].get("fields") or {}).get("class") == "OFFICIAL RELEASE" and LC.et(r["created_utc"]).startswith(day)
+               and spec in str((r["payload"].get("fields") or {}).get("relevant_events", "")).lower().replace("gbp/usd", "gbpusd")]
+        sess = "open" if o.get("session_open") else ("closed (NYSE 09:30-16:00 ET)" if spec == "gold" else "closed (FX week)")
+        L.append("| %s | %s | %s | %s | %s | %s | %s |" % (name, o.get("source", "UNKNOWN"), o.get("freshness", "UNKNOWN"),
+                 status.get(spec, "UNKNOWN"), sess, ", ".join(mw) or "none", "; ".join(t[:60] for t in rel) or "none"))
     return L + [""]

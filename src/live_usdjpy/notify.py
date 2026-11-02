@@ -420,10 +420,15 @@ def queue_digest(registry, now, cfg, snapshot=None, extra=None, positions=None):
         attention.append("%d HIGH alert(s) expired without acknowledgement" % len(unack))
     if extra and "no verified snapshot" in extra:
         attention.append("backup")
+    obs_items = sum(1 for r in registry.records("market_watch") if r["payload"].get("market") in ("GBPUSD", "GOLD")
+                    and today(r["created_utc"]))
+    obs_rel = sum(1 for r in registry.records("notification") if (r["payload"].get("fields") or {}).get("class") == "OFFICIAL RELEASE"
+                  and (r["payload"].get("fields") or {}).get("market") in ("GBPUSD", "GOLD") and today(r["created_utc"]))
     lines = ["System: %s. Last scan %s." % (system, LC.et(last)),
              "Data: %s." % data,
              "New setups today: %s." % (", ".join(new) or "none"),
              "Paper positions: %s." % (positions if positions is not None else "UNKNOWN"),
+             "Observation (GBP/USD, gold; INFORMATION ONLY): %d market-watch item(s), %d official release(s) today." % (obs_items, obs_rel),
              "Attention: %s." % (", ".join(attention) or "nothing"),
              "Logged without phone alert today: %s." % ("%d (%s)" % (len(logged), "; ".join(t[:50] for t in logged[:3]) + ("; ..." if len(logged) > 3 else ""))
                                                         if logged else "none")]

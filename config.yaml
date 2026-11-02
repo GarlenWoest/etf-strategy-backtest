@@ -339,7 +339,12 @@ live_usdjpy:                        # FORWARD (shadow) test, monitoring side onl
     always_sources: ["Federal Reserve", "Bank of Japan"]
     key_title_sources: ["US Bureau of Labor Statistics", "US Bureau of Economic Analysis"]
     key_titles: ["Employment Situation", "Consumer Price Index", "Gross Domestic Product", "GDP", "Personal Income and Outlays"]
-    lookback_hours: 24                        # only publications detected in the last 24 h alert (no replay of history)
+    lookback_hours: 24                        # only publications published AND detected in the last 24 h alert (no replay)
+    observation:                              # 2026-11-01: GBP/USD and gold, INFORMATION ONLY (logged for the digest)
+      gbpusd: {always_sources: ["Bank of England"], key_title_sources: ["UK Office for National Statistics", "US Bureau of Labor Statistics", "US Bureau of Economic Analysis"],
+               key_titles: ["Consumer price inflation", "GDP monthly estimate", "Labour Market", "Employment Situation", "Consumer Price Index"]}
+      gold: {always_sources: ["Federal Reserve"], key_title_sources: ["US Bureau of Labor Statistics", "US Bureau of Economic Analysis"],
+             key_titles: ["Employment Situation", "Consumer Price Index", "Gross Domestic Product", "GDP", "Personal Income and Outlays"]}
   entry_window_fx_days: {F001: 1, F002: 3}     # scans after detection during which a gate-blocked setup may still enter
   demo_registry: live/usdjpy/demo_registry.sqlite
   registry: live/usdjpy/registry.sqlite

@@ -10,11 +10,13 @@ Sources (official only):
   BEA               release schedule (GDP; Personal Income and Outlays incl. PCE), times 8:30 AM ET
   Bank of Japan     MPM schedule (dates only: no statement time is published) and the What's New feed (detection)
   ONS               release calendar (CPI, monthly GDP, labour market), times UK
+  BoE               official news RSS: MPC decisions (Monetary Policy Summary / Bank Rate / Monetary Policy Report) only
   Japan MoF         latest foreign-exchange intervention releases (monthly, quarterly)
   BLS               release calendar (iCalendar) and release feeds, identified per BLS robot policy with the contact
                     address from env var BLS_CONTACT_EMAIL (user approval 2026-10-28; never written anywhere);
                     reported BLOCKED while the variable is unset
-  Bank of England   BLOCKED: the page refuses automated clients. No unofficial calendar is substituted.
+  Bank of England   MPC decisions from the official news RSS (2026-11-01; no schedule page, so no advance times).
+                    No unofficial calendar is substituted.
 Statuses: SCHEDULED; PUBLISHED (confirmed by an official feed or page); PAST_UNCONFIRMED (time passed, no official
 confirmation source); a change of schedule is logged, never silently overwritten.
 Usage: .venv/bin/python tools/events.py poll
@@ -47,6 +49,8 @@ FED_FEED = "https://www.federalreserve.gov/feeds/press_monetary.xml"
 BEA = "https://www.bea.gov/news/schedule"
 BOJ_SCHED = "https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm"
 BOJ_FEED = "https://www.boj.or.jp/en/rss/whatsnew.xml"
+BOE_FEED = "https://www.bankofengland.co.uk/rss/news"         # official news feed; robots.txt allows /rss (read 2026-11-01)
+BOE_KEEP = ("Monetary Policy Summary", "Bank Rate", "Monetary Policy Report")   # MPC decisions and their report only
 ONS = "https://www.ons.gov.uk/releasecalendar?release-type=type-%s&keywords=%s"
 MOF = "https://www.mof.go.jp/english/policy/international_policy/reference/feio/index.html"
 BLS_ICS = "https://www.bls.gov/schedule/news_release/bls.ics"
@@ -54,8 +58,8 @@ BLS_FEEDS = {"EMPSIT": "https://www.bls.gov/feed/empsit.rss", "CPI": "https://ww
              "PPI": "https://www.bls.gov/feed/ppi.rss", "JOLTS": "https://www.bls.gov/feed/jolts.rss",
              "ECI": "https://www.bls.gov/feed/eci.rss"}
 YAHOO = {"usdjpy": ("JPY=X", 0.01), "gbpusd": ("GBPUSD=X", 1e-4), "gold": ("GC=F", None)}
-BLOCKED = {"Bank of England (MPC dates, Bank Rate)": "the BoE page returned 403 Access Denied to an automated client "
-           "(2026-10-28). Not polled; no browser disguise."}
+BLOCKED = {"Bank of England MPC dates page": "not polled (the schedule page rejected automated clients on 2026-10-28); "
+                                             "MPC decisions are read from the BoE's official news RSS instead (robots.txt allows /rss)"}
 
 
 def _guard(p):
@@ -70,6 +74,10 @@ def _headers(url):
     environment variable BLS_CONTACT_EMAIL. The address is never written anywhere: not to the cache, logs, status
     texts, reports or config. Every other host gets the standard python-requests agent."""
     host = requests.utils.urlparse(url).hostname or ""
+    if host == "www.bankofengland.co.uk":
+        # The BoE's edge rejects the default library agent; robots.txt allows /rss. An honest, identifying agent (no
+        # contact address, nothing disguised as a browser), at most a few polls a day (2026-11-01).
+        return {"User-Agent": "trading-research personal read-only monitor (official RSS, low frequency)"}
     if host == "bls.gov" or host.endswith(".bls.gov"):
         contact = os.environ.get("BLS_CONTACT_EMAIL", "").strip()
         if not contact:
@@ -271,6 +279,27 @@ def collect(store, now):
                                [{"fact": "BoJ published: %s" % it["title"], "source": it["link"]}])
     except Exception as ex:
         st["BoJ What's New feed"] = "FAILED: %s" % ex
+    # BoE news feed: MPC decisions only (GBP/USD observation market; INFORMATION ONLY)
+    try:
+        items = E.parse_boj_feed(get(BOE_FEED)[0])                  # generic RSS 2.0 parser
+        st["BoE news feed"] = "OK (%d items)" % len(items)
+        add = []
+        for it in items:
+            if it["published_utc"] and any(k.lower() in it["title"].lower() for k in BOE_KEEP):
+                d = it["published_utc"].astimezone(E.LONDON).date()
+                eid = "UK-BOE-MPC-%s" % d
+                if eid not in store["events"]:
+                    add.append(E.event(eid, "Bank of England", BOE_FEED, "UK", "central bank decision", it["title"], d,
+                                       "Europe/London", "BoE news feed; publication time from the feed",
+                                       reliability="official feed"))
+        merge(store, add, now)
+        for it in items:
+            if it["published_utc"] and any(k.lower() in it["title"].lower() for k in BOE_KEEP):
+                d = it["published_utc"].astimezone(E.LONDON).date()
+                mark_published(store, "UK-BOE-MPC-%s" % d, it["published_utc"], it["link"], now,
+                               [{"fact": "BoE published: %s" % it["title"], "source": it["link"]}])
+    except Exception as ex:
+        st["BoE news feed"] = "FAILED: %s" % ex
     # MoF intervention releases
     try:
         mof = E.parse_mof(E.flatten(get(MOF, SCHEDULE_TTL_S)[0]), MOF)
