@@ -78,7 +78,7 @@ Nothing has been enabled.
    - **Permissions → Repository permissions → Contents: Read and write.** Metadata becomes read-only automatically. Nothing else.
    - **Generate token** and copy it (shown once).
 3. **First push from your own Terminal** (not this chat). This stores the token in the macOS Keychain for this repository's path only, because the backup is configured with `credential.useHttpPath=true`:
-   - `cd /Users/garlenwoest/Trading/trading-research`
+   - `cd {{ROOT}}`
    - `git --git-dir=.backup.git --work-tree=. push origin main`
    - When asked: **Username** `GarlenWoest`; **Password**: paste the token.
 4. **Check:** `.venv/bin/python -I tools/backup_private.py run` should print **`BACKUP OK: …`**. Then tell me, and I'll confirm the status read-only.
