@@ -365,9 +365,13 @@ def recompute(registry, rule, cfg):
     return {"cash": cash, "usd_pos": usd_pos, "jpy": jpy}
 
 
-def v2_replay(registry, rule, cfg):
+def v2_replay(registry, rule, cfg, S_now=None):
     """Replay the realised position path through fx_engine_v2 (lag 0, trades at each fill's mid, cost c per USD traded,
-    calendar-day accrual). Returns its P&L in excess of USD cash, or None if there is nothing to replay."""
+    calendar-day accrual). Returns its P&L in excess of USD cash, or None if there is nothing to replay.
+    Fix 2026-11-01 (owner-approved): one row per UTC date (the day's last mark), EXCEPT that a day on which the position
+    was opened or closed is priced at that fill's mid (the replay used to trade at the day's LAST mark, so any move
+    between the fill and 00:00 UTC became a false mismatch); an open position is then revalued at `S_now`, the same
+    mark the ledger uses. Tolerance unchanged."""
     marks = []
     for r in registry.records("position_snapshot"):
         p = r["payload"]
@@ -377,6 +381,15 @@ def v2_replay(registry, rule, cfg):
     if len(marks) < 2:
         return None
     df = pd.DataFrame(marks, columns=["d", "S", "x"]).groupby("d").last()
+    fills = {}
+    for r in registry.records("fill"):
+        p = r["payload"]
+        if p["rule"] == rule and p["type"] == "trade":
+            d_ = pd.Timestamp(r["created_utc"]).tz_convert(None).normalize()
+            fills.setdefault(d_, []).append(p)
+    for d_, fs in fills.items():
+        if d_ in df.index and len(fs) == 1:                 # one fill that day: the day's trade happens at its mid
+            df.loc[d_, "S"] = fs[0]["mid"]
     if unresolved(registry, rule):
         return "DEFERRED"                     # an UNRESOLVED roll is booked on neither side until its TRUE-UP
     acc = [r["payload"] for r in registry.records("fill") if r["payload"]["rule"] == rule
@@ -402,7 +415,11 @@ def v2_replay(registry, rule, cfg):
     res = V2.run_balance(df["S"], ru_s, rj_s, tgt, cfg["costs"]["base"]["one_way"],
                          cfg["costs"]["base"]["financing_admin_fee_annual"], e0, max_x=1.0, lag=0, band=0.0, invert=True)
     cash_growth = e0 * float((1 + ru_s.iloc[:-1].values * pd.Series(df.index).diff().dt.days.iloc[1:].values / 360).prod())
-    return float(res.equity.iloc[-1]) - cash_growth
+    e_end = float(res.equity.iloc[-1])
+    if S_now and float(res.units.iloc[-1]) != 0:            # revalue the open position at the ledger's current mark
+        u = float(res.units.iloc[-1])                       # asset units (JPY), P = 1/S
+        e_end += u * (1.0 / S_now - 1.0 / float(df["S"].iloc[-1]))
+    return e_end - cash_growth
 
 
 def reconcile(registry, cfg, now, S):
@@ -414,7 +431,7 @@ def reconcile(registry, cfg, now, S):
         diff = max(abs(rec[k] - st[k]) for k in ("cash", "usd_pos", "jpy"))
         exact_ok = diff <= rc["exact_tolerance_usd"] * max(1.0, abs(st["jpy"]) / 1e4)
         ledger_pnl = equity(st, S) - cfg["sizing"]["start_usd"]
-        v2 = v2_replay(registry, rule, cfg)
+        v2 = v2_replay(registry, rule, cfg, S_now=S)
         tol = rc["v2_parity_tolerance_frac"] * cfg["sizing"]["start_usd"]
         deferred = v2 == "DEFERRED"
         parity_ok = True if (v2 is None or deferred) else abs(ledger_pnl - v2) <= tol

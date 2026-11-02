@@ -318,3 +318,23 @@ def test_w005_reopen_grace_quiet_when_prices_recover_alerted_when_they_do_not(re
     titles = [n["payload"]["title"] for n in reg.records("notification")]
     assert any("continues after the reopen grace" in t for t in titles)
     W.run(reg, datetime(2026, 11, 10, 15, 0, tzinfo=timezone.utc), {}, snap("STALE"), ev, cfg)   # weekday: normal alerting
+
+
+def test_regression_entry_day_price_move_does_not_cause_a_false_parity_halt(reg):
+    """Regression 2026-11-01: v2_replay treated the LAST mark of the entry's UTC day as the entry price, so a move between
+    the fill and 19:00 EST (00:00 UTC) became a ledger-vs-v2 mismatch. Here: F002-like entry (0.0738x) Sunday 19:02 EST
+    at mid 150.000, then +50 pips before the next 19:00 EST, same UTC day -> the old replay showed a gap > $2 (HALT)."""
+    t_entry = datetime(2026, 11, 9, 0, 2, tzinfo=timezone.utc)                 # Sun 19:02 EST
+    enter(reg, 1, 0.0737593, 150.000, t_entry)
+    PP.manage(reg, CFG, t_entry + timedelta(minutes=15), 150.000, RATES_HIST, "m1")
+    t_mark = datetime(2026, 11, 9, 21, 47, tzinfo=timezone.utc)                # Mon 16:47 EST, before the 17:00 roll
+    PP.manage(reg, CFG, t_mark, 150.500, RATES_HIST, "m2")
+    ok, rep = PP.reconcile(reg, CFG, t_mark, 150.500)
+    r = rep["F002"]
+    assert ok and r["parity_ok"], r
+    assert abs(r["ledger_pnl"] - r["v2_pnl"]) < 0.05                              # same entry price on both sides
+    # and the next UTC day, after the roll: the entry-day move is not frozen into a permanent gap
+    t2 = datetime(2026, 11, 10, 22, 2, tzinfo=timezone.utc)
+    PP.manage(reg, CFG, t2, 150.600, RATES_HIST, "m3")
+    ok, rep = PP.reconcile(reg, CFG, t2, 150.600)
+    assert ok and abs(rep["F002"]["ledger_pnl"] - rep["F002"]["v2_pnl"]) < 0.5
