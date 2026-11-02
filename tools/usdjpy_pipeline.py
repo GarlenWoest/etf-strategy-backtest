@@ -237,7 +237,8 @@ def run(demo=False):
         snap_for_digest = st.get("last_snapshot") or {}
         pos = [r_ for r_ in CFG["rules"] if PPm.state(reg, r_, CFG)["position"]]
         N.queue_digest(reg, now, ncfg, snap_for_digest, positions=", ".join(pos) or "none",
-                       extra=None if demo else BK.summary_line(reg, now, CFG["backup"], ROOT))
+                       extra=None if demo else BK.summary_line(reg, now, CFG["backup"], ROOT) + " Dead-man switch: %s." % (
+                           ", ".join("%s %s" % (k, v) for k, v in (st.get("deadman") or {}).items() if k != "at_utc") or "no ping yet"))
         sent = N.dispatch(reg, now, channels, ncfg)                 # deliver first: a digest queued this run counts
         if N.check_liveness(reg, now, ncfg, fx_open=K.fx_market_open(now), position_open=bool(pos)):
             sent += N.dispatch(reg, now, channels, ncfg)           # deliver any liveness alert raised just now
@@ -248,6 +249,10 @@ def run(demo=False):
         done.append("notify %d action(s)" % len(sent))
         st["last_run_utc"] = now.isoformat()
         st.pop("last_error", None)
+        if not demo:                                                # dead-man switch (healthchecks.io); never fails a run
+            from src.live_usdjpy import deadman as DM
+            st["deadman"] = DM.ping(now, ok=True)
+            done.append("dead-man %s" % ", ".join("%s %s" % (k, v) for k, v in st["deadman"].items() if k != "at_utc"))
         save_state(st, demo)
         print("RUN OK %s | %s | %s" % (now.isoformat(timespec="seconds"), "; ".join(why) or "notify only", "; ".join(done)))
     except Exception as ex:
@@ -261,6 +266,12 @@ def run(demo=False):
             pass
         st["last_run_utc"] = now.isoformat()
         st["last_error"] = msg
+        if not demo:
+            try:
+                from src.live_usdjpy import deadman as DM
+                st["deadman"] = DM.ping(now, ok=False)
+            except Exception:
+                pass
         save_state(st, demo)
         print("RUN ERROR %s | %s" % (now.isoformat(timespec="seconds"), msg))
         sys.exit(1)
