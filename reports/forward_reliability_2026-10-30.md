@@ -213,3 +213,86 @@ Why: the LaunchAgent takes an OANDA/Alpaca snapshot every hour and polls the off
 10. lessons and standing limitations.
 
 Below 30 resolved signals it says **no statistical conclusion is possible**, and it never suggests parameter changes or new strategies. Real test on a copy of the live registry (week of 10-26) shows the F002 trigger and block, the F001 watch, the BoJ statement, the MoF release and the 27-minute sleep gap. **Tests:** +2.
+
+## Financing audit, Phase A: read-only diagnosis (2026-11-01, 19:10–19:45 ET)
+
+**Baseline:** git `50ebd74`; forward registry chain intact (277 records); 359 tests pass; consistent backup-API copy at `tmp/audit_financing/registry_baseline_20261101T1903.sqlite` (ignored). **Open paper position:** F002-2026-10 LONG, entered 2026-11-01 19:02 EST ($737.59, 0.074x). **No financing has accrued yet**: 0 financing records. The first accrual is the Monday 11-02 17:00 EST roll, booked by the 17:02 scan. The MontyFinance repo (read-only, `~/untitled folder/montyfinance-research`) was used only as untrusted reference.
+
+### Defects (verified on current main, reproduced with synthetic inputs and the real functions)
+
+| # | Defect | Where | Evidence |
+|---|---|---|---|
+| F1 | **A missing rate accrues at 0%** (`ru[0] or 0.0`, `rj[0] or 0.0`). The record keeps `r_usd = None` with an "UNKNOWN" note, but equity is booked as if the rate were 0 | `src/live_usdjpy/paper.py` `accrue` | Long 0.5x, 1 roll: USD leg +0.5556 with the rate, **0.0000** without (hand: 5000 × 0.04/360). Short: −0.5556 vs 0.0000 |
+| F2 | **A failed fetch is cached as the day's rates.** A later success is ignored until the next UTC date (00:00 UTC = 19:00 EST) | `tools/usdjpy_pipeline.py` `fetch_rates` (the cache key is the UTC date; a failed leg is stored as `(None, "UNKNOWN …")`) | Timeout, then FRED answers 15 minutes later: still `None` from the cache; fixed only on the next UTC day |
+| F3 | **No HTTP status check or parse validation:** a 503 page or an empty body becomes "UNKNOWN (IndexError)", so it is F1 again | `fetch_rates` | 503 HTML and empty body reproduced |
+| F4 | **No maximum age** on either series; old observations are reused indefinitely (the observation date survives only inside the info string) | `fetch_rates`, `accrue` | Design inspection; the JPY observation in use is 2026-09-01 (61 days old today) |
+| F5 | **False reconciliation HALT possible:** the v2 parity replay uses the *first known* rate for the whole path (default 0.0), while the ledger books 0 on missing days | `paper.py` `v2_replay` | 0.5x, one valid roll then 4 missing: ledger vs v2 differ by **$2.51 > $2 tolerance → HALTED**. With all rates valid, the gap is a constant ~$0.83 (entry-day timing) and never trips |
+| F6 | **Catch-up rolls use today's rates for past rolls** (mild accounting look-ahead after an outage) | `accrue` (one `rates` dict for all rolls since the last) | Design inspection |
+| F7 | **Scorer baselines treat a missing rate as 0** (`r_usd or 0`). Reporting only, not the ledger | `src/live_usdjpy/scorer.py` `pair_pnl` | Design inspection |
+| F8 | **ETF books:** DTB3 is forward-filled with no age limit. A total fetch failure fails the whole update (fail closed: no 0%, the books simply aren't updated). A FRED gap longer than 15 days would give NaN interest | `tools/paper_books.py` (`irx.ffill()`), `tools/market_data_alpaca.py` `fred_dtb3` | Design inspection; no NaN in `values.csv` |
+
+**Not defects:**
+- One leg failing doesn't affect the other leg (reproduced).
+- A genuine 0% is recorded as `0.0`, distinct from `None` (reproduced).
+- Observations aren't relabelled with today's date; the original date is kept in the info string.
+- No rate input uses data before it is published; DTB3 for day *d* is the prior trading day's value.
+- No Yahoo data feeds any forward, paper or watchlist calculation.
+
+**Already occurred?** **No.** No financing has accrued in the forward ledger. The ETF books' cash interest through 10-30 used Yahoo ^IRX (3.998%/yr on 10-30) with no NaN or 0 rows. Earlier failed rate fetches can't be detected after the fact (fetch outcomes aren't logged), but before 11-01 19:02 EST there was no open position for them to affect.
+
+**Out of scope, flagged only:**
+- `tools/events.py` `reactions()` still downloads **Yahoo 1-minute data** on every automated event poll. It feeds no calculation, but it is still automated Yahoo collection.
+- The pre-registration says results are reported "with and without financing"; the scorer doesn't show a "without" variant.
+
+### Rate definitions
+
+| Series | Use | Source and ID | Type | Units | Frequency, observation date, typical availability | Revisions | Latest (seen 11-01) | Fitness as a financing proxy |
+|---|---|---|---|---|---|---|---|---|
+| DTB3 | Forward ledger, USD leg; ETF books' cash interest | FRED (Fed H.15), DTB3 | 3-month T-bill, secondary market, **discount basis** | % per year | Daily (US business days); posted with a ~1 business-day lag (Friday's value appears Monday) | Rare | 4.00% on 10-29 | Short USD rate; a reasonable stand-in for the USD side of tom-next, but not an overnight rate and not discount-to-yield converted |
+| IRSTCI01JPM156N | Forward ledger, JPY leg | FRED mirror of OECD MEI: Japan "immediate rates: call money/interbank" | **Monthly average** of the overnight call rate | % per year | Monthly, dated the 1st of the month; September's value was available by 10-29 (~1 month after month end) | OECD can revise | 1.043% for Sep 2026 (Aug 0.977%) | Right instrument (overnight call), wrong timing: a monthly average up to ~3 months old lags BoJ policy moves |
+| JGB 1Y (MoF) | **Historical Study 4 only** (`usdjpy_study1`, frozen) | MoF JGB yields | Government bond yield | % per year | Daily | — | not fetched by the forward system | Not used by the forward ledger. MontyFinance's "three definitions" mixes two systems |
+| BoJ uncollateralized overnight call rate (daily) | **Not used** | BoJ Time-Series Data API | Overnight money-market rate (the policy-target rate) | % per year | Daily, next business day | Rare | not fetched | Best proxy for the JPY side; would be a new source |
+
+**Against the frozen pre-registration** (§4: "US: 3-month T-bill (FRED DTB3). Japan: overnight call rate (BoJ Time-Series API or FRED mirror)… **A missing rate input uses the last known value, flagged STALE.** Results are then reported with and without financing"):
+- **(a) Compliance fix:** F1 books 0% where the pre-registration requires carrying the last known value forward, flagged STALE. F2 and F3 are how that happens.
+- **(a) Compliant:** DTB3, and the 1.00% (base) and 1.50% (stress) admin fees.
+- **(b) Amendment candidate:** "FRED mirror" is ambiguous. FRED has no daily mirror of the BoJ call rate; the code uses the OECD monthly average, which is defensible but lagged. A v0.4 amendment could name the BoJ daily rate (new source).
+- **(b) Amendment candidate:** the pre-registration sets no maximum age for carry-forward. Adding one, with UNRESOLVED beyond it, tightens it and would be part of v0.4. Never silently.
+
+**Broker financing, kept separate:**
+- **A, our frozen proxy:** USD leg × DTB3 × d/360; JPY leg × call rate × d/365; minus |USD exposure| × 1.00%/yr × d/365; at each 17:00 ET roll; Wednesday ×3.
+- **B, OANDA US's stated method** (official page, verified in the 10-29 report): notional × (liquidity-provider tom-next rate ± an annualized admin fee) ÷ 365, charged at 5 p.m. ET, typically ×3 on Wednesdays; 1.00%/yr for the bucket that includes USD/JPY.
+- **C, verified broker observations:** none.
+- **D, estimates:** everything we book is A, an estimate.
+- No change to the cost assumptions is proposed. A separately approved check of OANDA practice financing charges could be added later.
+
+**The MontyFinance prototype** (`research/bot_candidates/freshness_gate.py`):
+- **Tests:** 8 test functions with 11 assertions. Its report says both "8 tests" and "5 unit tests"; 8 is correct.
+- **Coverage:** frequency and lag classification for DTB3, the monthly JPY series and COT; carry-forward.
+- **Not covered:** fetch, cache, accounting, 0% vs missing, negative or invalid values, or parity.
+- **Flaw:** `resolve_rate` gives a fresh value the observation date `as_of`, i.e. **relabels it with today's date**.
+- **Stale threshold:** ~156 days for the monthly series.
+- **Disagreement:** it says the latest JPY observation on 10-31 was 08-01; we observed **09-01 on 10-29**.
+
+### Proposed policy (implemented only after your approval)
+
+- **States:** VALID, VALID_ZERO, LATE, STALE, MISSING, FETCH_FAILED, UNRESOLVED. Each observation stores source and ID, currency, raw value and units, normalized decimal, observation date, fetch time, last successful retrieval, age, cadence, state, carried-forward flag and error.
+- **Validation:** finite numbers only; percent → decimal once; −5% … +25% accepted (negative is valid); an observation date in the future is rejected.
+- **Cache:** the last *successful* observation per series is kept separately from the last attempt and its error. A failure is never cached as success. On failure, retry at the next run, at most once per 15 minutes (no storms). A later success replaces the failure state. Carried values keep their original observation date.
+- **Thresholds (observation age at roll time):**
+  - **DTB3:** VALID ≤ 3 US business days (normal lag 1–2, plus one for a holiday weekend); LATE, carried forward and flagged, at 4–5; STALE above 5 business days (a full week missing is an outage).
+  - **IRSTCI01JPM156N (observation dated the 1st of the month):** VALID ≤ 95 days (month span ~31 + verified ~30-day publication lag + slack); LATE at 96–125 (one more month missing); STALE above 125 days. That is stricter than the prototype's ~156, so months-old data doesn't stay acceptable just because the series is monthly.
+- **Accrual:**
+  - VALID, VALID_ZERO and LATE book normally; a carried value is labelled CARRIED_FORWARD with its original date. This **is** the pre-registration's "last known value, flagged" rule, so it's a compliance fix.
+  - STALE or no value at all: the roll is booked as **UNRESOLVED** (position, roll, missing source, reason, inputs), never 0%. Once acceptable data exists, an appended **TRUE-UP** record carries the exact amount per original roll date. **This part goes beyond the pre-registration: v0.4 amendment, your approval needed.**
+  - Each roll uses the observations available at that roll's time, which fixes F6.
+- **Parity (F5):** the v2 replay uses the same per-roll resolved rates. UNRESOLVED rolls are excluded from both sides and listed, so they can't cause a false HALT.
+- **Readiness:** a stale or unresolved financing input is **DEGRADED, not BLOCKED**. At the maximum 0.5x size a full day's carry is about $0.28, roughly 0.003% of equity, far below every risk limit (−1% daily, −3%, −5%). It can't materially move sizing or risk checks. No numeric limit changes.
+- **Rollback:** a config flag (`live_usdjpy.financing.policy: v1|legacy`).
+- **Recording:** one canonical JPY definition, recorded in the research memory ledger as a compliance note.
+- **ETF books:** same states for DTB3; no NaN or 0 interest is ever booked silently.
+- **Scorer baselines:** use the same resolved rates.
+
+**Can the fix be in place before the Monday 17:00 EST roll?** Yes, if you approve by about Monday 14:00 ET. Implementation and tests take a few hours, and edits go in between runs. Without the fix, Monday's accrual is still correct whenever FRED answers, as it did all weekend; the risk is only an outage at that moment. On F002's 0.074x position the worst case is about $0.08 a day.
+
+**Reopen-grace proposal (separate approval given; built after this phase):** 30 minutes after the Sunday 17:00 ET reopen. Outage/recovery alerts for STALE or UNAVAILABLE prices are not sent if the price is LIVE again by the 17:32 scan. Everything is still recorded, and preflight's 2-scan rule and every HIGH alert are unchanged. Today's prices recovered by 17:17.
