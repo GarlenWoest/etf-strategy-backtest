@@ -415,3 +415,12 @@ No affected records; nothing recorded vs recalculated to show; no corrections pr
 
 1. **The entry-day parity defect:** approve the fix (replay from the entry fill's mid), or accept the false-HALT risk with a manual `resume` if it happens.
 2. **Later proposals:** the BoJ daily call rate as the JPY source (v0.5), and a compliant source for event reactions.
+
+### Entry-day parity fix (owner-approved 2026-11-01; live from 22:25 EST)
+
+- **Fix:** `v2_replay` now prices the day a position opens or closes at that fill's mid, and revalues an open position at the ledger's current mark. Tolerance unchanged ($2 per $10,000).
+- **Regression test:** a F002-like 0.074x entry, then a 50-pip move before the next 19:00 EST. It **failed before** (ledger +$2.34 vs v2 −$0.11, gap $2.45, HALT) and **passes after**. Exit days were checked too: a $0.0000 gap at 0.074x and $0.0022 at 0.5x.
+- **Replay proof on a copy of the live registry:** F002's gap is $0.9437 with the old replay and $0.0002 with the new one at the same mark. The exact recomputation is unchanged.
+- **Live:** the 22:32 EST scan is clean, and F002 shows ledger +$0.8587 vs v2 +$0.8585 (gap $0.0002). **No false HALT occurred before the fix**: there are 0 risk_state records.
+- **Tests:** 399 pass.
+- **Deferred proposals (not applied):** the BoJ daily call rate as the JPY source (v0.5), and a compliant source for event reactions.
