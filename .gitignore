@@ -32,3 +32,7 @@ research/library/library.sqlite
 
 # owner's research report (local reference only; contains personal details, never committed)
 research/TRADING_INTELLIGENCE_RESEARCH_REPORT_2026-10-29.md
+reports/SYSTEM_EXPLAINED_*
+
+# research review outputs (local only, never committed)
+reports/research_review/
