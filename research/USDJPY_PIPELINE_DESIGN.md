@@ -1,5 +1,7 @@
 # USD/JPY trading-intelligence pipeline: design (draft v0.1, 2026-10-28)
 
+> **Note added 2026-11-02:** superseded draft (10-28). The forward test's admin fee is **1.00% a year (1.50% stress)**, as frozen in v0.2 (`research/USDJPY_FORWARD_TEST_PREREG.md:98`). The 0.75% below was Study 4's historical markup. Text unchanged.
+
 _Design only. Nothing here is built, scheduled or connected. No broker, no orders, no credentials. Every output is labelled **EXPERIMENTAL SHADOW SIGNAL, not financial advice**. The candidate rules and risk limits are in `research/USDJPY_CANDIDATES_v0.1.md`; the broker options in `reports/paper_broker_options.md`._
 
 ## 1. Purpose and boundaries
