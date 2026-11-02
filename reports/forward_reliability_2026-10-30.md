@@ -424,3 +424,49 @@ No affected records; nothing recorded vs recalculated to show; no corrections pr
 - **Live:** the 22:32 EST scan is clean, and F002 shows ledger +$0.8587 vs v2 +$0.8585 (gap $0.0002). **No false HALT occurred before the fix**: there are 0 risk_state records.
 - **Tests:** 399 pass.
 - **Deferred proposals (not applied):** the BoJ daily call rate as the JPY source (v0.5), and a compliant source for event reactions.
+
+## Next round, item 1: dead-man switch proposal (2026-11-01; nothing wired in)
+
+**Problem:** when the Mac sleeps, dies or is off, nothing runs and nothing can alert. The gap is only recorded at the next wake, as on 10-31 13:52–14:32. An external service that expects a regular ping and alerts when it stops covers that.
+
+**Design (both options):**
+- After each successful run, the runner sends one HTTPS GET to a secret ping URL: no body, timeout 10 s, never blocking or failing the run.
+- After a RUN ERROR it sends the `/fail` variant where the service supports one.
+- The URL (it contains the secret) lives only in the Keychain (`trading-research-deadman-url`, plus `-weekday` if two checks are used). It is never printed, logged or stored in records; only "ping OK/failed" with a timestamp goes into the runner state.
+- **What leaves the Mac:** the fact and time of a run, the Mac's public IP address and the HTTP client's user-agent string. No market data, no records, no credentials.
+
+**Your timing (45 min while FX is open, longer when closed).** The runner fires every 15 min around the clock, so it pings every 15 min regardless of FX hours. Two checks give your split:
+
+| Check | Schedule | Alerts after | Covers |
+|---|---|---|---|
+| A, weekday | cron `*/15 * * * 1-5`, time zone America/New_York, grace 30 min | **45 min** of silence, Mon–Fri | The FX week (Sunday evening excepted) |
+| B, always | simple period 15 min, grace 6 h | **6 h 15 min** of silence, any day | Weekends and Sunday evening (configurable) |
+
+**Options compared** (vendor pages read 2026-11-01):
+
+| | **healthchecks.io (recommended)** | **Cronitor** |
+|---|---|---|
+| Free tier | Hobbyist $0: **20 checks**, 100 log entries per check | Hacker $0: **5 monitors**, 1 user, 5-minute fastest frequency |
+| Heartbeat type | Simple period + grace, or cron/OnCalendar with a time zone; `/start`, `/fail`, `/<exit code>` signals | Cron/heartbeat monitors included on every plan |
+| Alert to your phone | **Official Pushover integration, priorities silent to Emergency**, plus email. ntfy: no official integration found; possible through a generic webhook (unverified) | Email, Slack, Discord, Teams, **webhooks** (ntfy via webhook possible). **No Pushover integration listed**; SMS not on the free plan |
+| Rate limit / body | ≤ 5 pings a minute; stores the body up to 100 kB (we send none); GET, HEAD or POST | n/a for our once-per-15-min ping |
+| Operator, hosting, privacy | SIA Monkey See Monkey Do (Riga, Latvia). Hosting: Hetzner; encrypted backups on AWS. Logs IP, user agent and timestamps; backups kept up to 2 months; inactive accounts closed after about 13 months. Open source (could later be self-hosted on a *different* machine) | US company; one dashboard user on the free plan; retention not stated for the free plan |
+| Cost | $0 | $0 |
+
+**Recommendation:** healthchecks.io.
+- It has a native Pushover integration, so a missed-run alert arrives through the same channel as everything else, and can use Emergency priority (repeats until acknowledged).
+- Its free tier comfortably covers 2 checks.
+- It's open source, with an EU operator.
+- Downside: one more third party learns when the Mac runs and its IP address.
+
+**Your one-time setup (after you approve; credentials never go through me):**
+1. Create a free account at healthchecks.io.
+2. Create check **A**: Schedule = Cron, `*/15 * * * 1-5`, Time zone `America/New_York`, Grace 30 minutes.
+3. Create check **B**: Period 15 minutes, Grace 6 hours.
+4. Integrations → Pushover → subscribe. Use priority Emergency (or High) for "down" and normal for "up". Optionally add email.
+5. Store each ping URL in your own Terminal (it prompts for the value, so nothing lands in shell history):
+   - `security add-generic-password -a "$USER" -s trading-research-deadman-url -w` (check B)
+   - `security add-generic-password -a "$USER" -s trading-research-deadman-url-weekday -w` (check A)
+6. Tell me "dead-man set".
+
+I then wire the ping into the runner between runs, with tests (no network in tests) and a real check that both checks turn "Up".
