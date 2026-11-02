@@ -36,3 +36,6 @@ reports/SYSTEM_EXPLAINED_*
 
 # research review outputs (local only, never committed)
 reports/research_review/
+
+# outside-review audit responses (private; never committed)
+reports/AUDIT_RESPONSE_*
