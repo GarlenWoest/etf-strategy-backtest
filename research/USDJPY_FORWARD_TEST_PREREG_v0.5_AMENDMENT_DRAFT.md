@@ -1,6 +1,6 @@
 # Forward test, amendment v0.5: financing-rate sources (DRAFT: candidates only; not frozen, not built)
 
-_Draft 2026-11-02 at the owner's request: one amendment, reviewed together. It would replace FRED as the source of the two v0.4 financing series (risk register RR-1). Until you approve and freeze a final text, v0.4 stays in force unchanged (FRED DTB3 and FRED IRSTCI01JPM156N, with the minimal cache from the 11-06 batch)._
+_Draft 2026-11-02 at the owner's request (codes confirmed by read-only metadata lookups the same day): one amendment, reviewed together. It would replace FRED as the source of the two v0.4 financing series (risk register RR-1). Until you approve and freeze a final text, v0.4 stays in force unchanged (FRED DTB3 and FRED IRSTCI01JPM156N, with the minimal cache from the 11-06 batch)._
 
 **Tags:**
 - **[L]** checked locally.
@@ -32,19 +32,28 @@ _Draft 2026-11-02 at the owner's request: one amendment, reviewed together. It w
 
 ## Candidate 2: Japan leg from the OECD directly
 
-**Today:** FRED IRSTCI01JPM156N, the FRED mirror of the OECD Main Economic Indicators series "Immediate rates: call money / interbank, Japan, monthly average".
+**Today:** FRED IRSTCI01JPM156N, the FRED mirror of the OECD series "Immediate interest rates, call money, interbank rate, Japan, monthly".
 
-**Candidate:** the same series from the OECD's own SDMX API (`https://sdmx.oecd.org/public/rest/data/{agency},{dataflow},{version}/{key}`). **The dataflow and key for the immediate (call/interbank) rate for Japan are [U]:** the current OECD Data Explorer short-term-rates dataflow lists a 3-month interbank measure (IR3TIB) that FRED also mirrors. Whether the *immediate-rate* series (IRSTCI) is still published as such is unverified.
+**Confirmed by read-only metadata lookups, 2026-11-02 (no observations downloaded):**
+- **Dataflow:** `OECD.SDD.STES,DSD_STES@DF_FINMARK,4.0` ("Financial market"). DSD `DSD_STES` 4.0, with dimensions REF_AREA, FREQ, MEASURE, UNIT_MEASURE, ACTIVITY, ADJUSTMENT, TRANSFORMATION, TIME_HORIZ, METHODOLOGY [V: https://sdmx.oecd.org/public/rest/dataflow/OECD.SDD.STES/DSD_STES@DF_FINMARK/latest?references=all].
+- **Measure code:** `IRSTCI` = "Immediate interest rates, call money, interbank rate" (CL_MEASURE). Distinct from `IR3TIB` (3-month) and `IRLT` (long-term) [V: same response].
+- **Series key:** `JPN.M.IRSTCI.PA._Z._Z._Z._Z.N` is **available**, with 495 observations reported by the availability constraint (metadata) [V: https://sdmx.oecd.org/public/rest/availableconstraint/OECD.SDD.STES,DSD_STES@DF_FINMARK,4.0/JPN.M.IRSTCI......?mode=available].
+- **Data request (for later, not used):** `https://sdmx.oecd.org/public/rest/data/OECD.SDD.STES,DSD_STES@DF_FINMARK,4.0/JPN.M.IRSTCI.PA._Z._Z._Z._Z.N`.
 
-**Proposed text, conditional:**
-- If the OECD publishes the identical IRSTCI series, the JPY leg takes it from the OECD API: a source switch, same series, same v0.4 age rules.
-- If only a different series exists (e.g. IR3TIB, 3-month), switching is a **series change**. It must be stated here with its definitional difference and a comparison on shared months before freezing.
+**Still to confirm:**
+- that the values equal FRED IRSTCI01JPM156N on shared months: a comparison on pre-2024 months, after you approve that data download;
+- the OECD terms of use [U].
 
-**Terms:** OECD terms of use [U: not read].
+**Proposed text:** the JPY leg takes `JPN.M.IRSTCI.PA._Z._Z._Z._Z.N` from the OECD API. This is a source switch of the same series under the unchanged v0.4 age rules, conditional on the value comparison and the live overlap test.
 
 ## Candidate 3: BoJ daily call rate, as validation first
 
-**Series:** the BoJ uncollateralized overnight call rate (daily), from BoJ Time-Series Data Search. The BoJ launched an API for this database on 18 February 2026 (JSON/CSV) [V: https://www.boj.or.jp/en/statistics/outline/notice_2026/not260218a.htm; exact series code, key requirement and API terms [U]].
+**Series (confirmed, 2026-11-02, metadata only):**
+- **Database and code:** database `FM01` ("Uncollateralized Overnight Call Rate (average)", updated every business day), series code **`STRDCLUCON`**: "Call Rate, Uncollateralized Overnight, Average (Daily)", unit percent per annum, frequency daily.
+- **Coverage:** start 1998-01-05; metadata reported last observation 2026-10-29 and last update 2026-11-02 [V: live `getMetadata` response, https://www.stat-search.boj.or.jp/api/v1/getMetadata?format=json&lang=en&db=FM01].
+- **Companion series:** STRDCLUCONH and STRDCLUCONL, listed beside it in the manual's example.
+- **API:** base `https://www.stat-search.boj.or.jp/api/v1/` with `getDataCode`, `getDataLayer` and `getMetadata`. Example: `getDataCode?lang=en&db=FM01&code=STRDCLUCON&startDate=YYYYMM`. Launched 18 February 2026 [V: https://www.boj.or.jp/en/statistics/outline/notice_2026/not260218a.htm; manual https://www.stat-search.boj.or.jp/info/api_manual_en.pdf].
+- **Access conditions:** no API key appears in any documented request [V: manual]. A credit line is requested, and the service may be suspended without notice; the usage notice https://www.stat-search.boj.or.jp/info/api_notice_en.pdf must be read before use [U: not read in full].
 
 **Proposed role, in this amendment: validation only, not booking.**
 - Record the daily BoJ call rate beside the monthly JPY rate used for booking.
@@ -62,6 +71,6 @@ _Draft 2026-11-02 at the owner's request: one amendment, reviewed together. It w
 ## Decisions needed (together)
 
 1. Candidate 1 (Treasury bank-discount), with the overlap condition.
-2. Candidate 2: identify the exact OECD dataflow first (a read-only metadata query), then decide.
+2. Candidate 2: dataflow and key confirmed; approve a pre-2024 value comparison with FRED IRSTCI01JPM156N before deciding.
 3. Candidate 3 as validation only.
 4. Read the Treasury, OECD and BoJ API terms before freezing.
