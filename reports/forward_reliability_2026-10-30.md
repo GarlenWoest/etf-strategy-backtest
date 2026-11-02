@@ -296,3 +296,122 @@ Below 30 resolved signals it says **no statistical conclusion is possible**, and
 **Can the fix be in place before the Monday 17:00 EST roll?** Yes, if you approve by about Monday 14:00 ET. Implementation and tests take a few hours, and edits go in between runs. Without the fix, Monday's accrual is still correct whenever FRED answers, as it did all weekend; the risk is only an outage at that moment. On F002's 0.074x position the worst case is about $0.08 a day.
 
 **Reopen-grace proposal (separate approval given; built after this phase):** 30 minutes after the Sunday 17:00 ET reopen. Outage/recovery alerts for STALE or UNAVAILABLE prices are not sent if the price is LIVE again by the 17:32 scan. Everything is still recorded, and preflight's 2-scan rule and every HIGH alert are unchanged. Today's prices recovered by 17:17.
+
+## Financing audit: implementation, reconciliation and final status (2026-11-01 evening, EST)
+
+### Phase E: reconciliation
+
+**None needed.** The forward registry held **0 financing records** before the fix went live (21:48 EST). The only open position, F002-2026-10, has not reached a roll yet; its first is 2026-11-02 17:00 EST. The ETF books' cash interest used valid T-bill data on every processed day (no NaN, no zero rows). No correction records are proposed.
+
+### A. Defect verification
+
+| Claim / finding | Exists on current main before the fix? | Path | Evidence | Fixed before? |
+|---|---|---|---|---|
+| A missing rate accrues at 0% | **Yes** | `paper.py accrue` (`ru[0] or 0.0`) | Reproduced: USD leg $0.5556 → $0.0000 | No |
+| A failed fetch is cached for the day | **Yes** | `usdjpy_pipeline.fetch_rates` (UTC-date cache) | Reproduced | No |
+| No HTTP or parse validation | **Yes** | `fetch_rates` | 503 page and empty body → missing → 0% | No |
+| No maximum age | **Yes** | `fetch_rates` / `accrue` | Inspection | No |
+| False HALT through v2 parity (missing rates) | **Yes** | `paper.v2_replay` (first known rate, default 0) | 0.5x with 4 missing rolls: $2.51 > $2 | No |
+| Catch-up uses today's rates for past rolls | **Yes** | `accrue` | Inspection | No |
+| "JPY defined three ways" | **Partly.** JGB 1Y is in the frozen *historical* study config, not the forward ledger | — | `config.yaml usdjpy_study1` | — |
+| A genuine 0% treated as missing | **No** (0.0 is recorded distinctly) | — | Reproduced | — |
+
+### B. Data sources
+
+- **US:** FRED DTB3, 3-month T-bill (discount basis), daily, ~1 business day publication lag.
+- **JPY:** FRED IRSTCI01JPM156N, the OECD monthly average of the call rate, dated the 1st of the month, available about a month after month end. Now the canonical v0.4 definition.
+- **Not used:** the BoJ daily call rate. It would be the better JPY proxy; it's a **separate proposal, not applied**: a new read-only source (BoJ Time-Series Data API), its own validation, and a v0.5 amendment.
+- **What remains an approximation:** everything. DTB3 isn't a tom-next rate and the OECD series isn't a broker charge. The admin fee (1.00% base, 1.50% stress) follows OANDA US's stated fee, but no broker charge has been observed. **Broker financing is still estimated.**
+
+### C. Changes (commits `a8ef21a` … `8ca22ff`; live from 21:48 EST)
+
+- **`src/live_usdjpy/financing.py` (new):**
+  - strict fetch validation;
+  - a cache of successful observations only, each with its first-seen time;
+  - one retry per 15 minutes after a failure;
+  - per-roll resolution: VALID / VALID_ZERO / LATE (carried forward) / STALE / MISSING, with the original observation date and age.
+- **`paper.py`:**
+  - per-roll rates;
+  - UNRESOLVED rolls book nothing and record the legs;
+  - an appended TRUE-UP for the original roll date (to the legs, or to cash with a recorded conversion if the position has closed);
+  - recompute handles both;
+  - the v2 parity replay uses the same per-roll rates and is deferred, not failed, while a roll is unresolved;
+  - `financing.policy: legacy` for rollback.
+- **Runner:** uses the cache. Readiness reports financing as DEGRADED only. Scorer baselines use the same per-roll rates, and say UNKNOWN (never 0) if a roll is unresolved.
+- **ETF books:**
+  - The T-bill observation date and age are kept in `paper/inputs/`.
+  - LATE is carried forward and flagged.
+  - STALE or missing leaves the day UNRESOLVED (`paper/interest_unresolved.csv`, append-only, in the crash-safe commit set), with a TRUE-UP later.
+  - The DTB3 fetch is validated.
+- **Also approved and applied:**
+  - **W005 reopen grace:** stale-price outages within 30 minutes after the Sunday 17:00 ET reopen are recorded, and alerted only if prices are still stale afterwards. HIGH alerts are unaffected.
+  - **Event reactions:** the Yahoo 1-minute download was removed from `tools/events.py`. New reactions read UNKNOWN; earlier ones are kept. A compliant source (for example OANDA practice candles) is a later proposal; no new endpoint was added.
+- **Compatibility:** old records are unchanged and still read. The old tuple-shaped rate input still works, and a None in it is now UNRESOLVED.
+
+### The ~$0.83 ledger vs v2 parity gap with all rates valid
+
+- **Cause:** the two sides count financed days differently.
+  - The ledger books whole 17:00 ET rolls, including the roll right after entry. Its Wednesday triple roll covers the coming weekend in advance (FX spot settlement).
+  - The v2 replay accrues calendar days between its first and last daily mark.
+- **Measured** (0.5x, today's rates, net carry $0.2757 per financed day): Mon–Tue 1.00 day of carry; Mon–Wed 3.00; Mon–Fri 3.00; Mon to next Mon 1.00; Mon to next Wed 3.01; 4 weeks 3.02.
+- **It doesn't grow with hold length:** it swings between about 1 and 3 days of net carry.
+- **It isn't an accounting error:** it is a timing-convention difference (prepaid weekend vs calendar accrual).
+- **Headroom:** the $2 tolerance equals 7.3 days of today's carry at the maximum size. It could be exceeded only if net annual carry rose above about 4.9%. Tolerance unchanged.
+
+### Flagged, not fixed (outside the approved scope; decision needed)
+
+**False reconciliation HALT from price moves on the entry day.**
+- **Cause:** `v2_replay` groups marks by UTC date and takes each day's *last* mark. On the entry day, that treats the latest price as the entry price, so every move between the fill and 19:00 EST (00:00 UTC) shows up as a ledger-vs-v2 mismatch. From the next UTC day the gap freezes at that amount.
+- **Today:** F002-2026-10's last stored reconciliation shows ledger +$0.98 vs v2 −$0.11, a $1.09 gap before any financing.
+- **Risk:** a move of about 43 pips from the entry mid before Monday 19:00 EST would push F002 past $2, giving HALTED plus a HIGH alert. At 0.5x, about 6 pips would do it.
+- **Effect if it happens:** new entries are blocked until a manual `resume`. Exits, marks and the ledger are unaffected.
+- **Proposed fix:** start the replay from the entry fill's mid instead of the day's last mark (a fix to the comparison, not the tolerance).
+
+### D. Reconciliation
+
+No affected records; nothing recorded vs recalculated to show; no corrections proposed.
+
+### E. Testing
+
+- **Baseline:** 359 pass (`50ebd74`).
+- **After:** **398 pass** in the main checkout, including the private paper-data tests; 0 failures. +39 new tests:
+  - fetch failures: timeout, 429, 5xx, empty, HTML, malformed, NaN, units, future date;
+  - cache and retry, one leg failing, cache kept through an outage;
+  - ages: Monday after a weekend, Fed holiday, monthly lag, LATE and STALE edges;
+  - zero and negative rates, no look-ahead;
+  - **independent arithmetic reference** (shares no code with the simulator): long and short, both legs, a Wednesday triple, a rate change mid-week, sign checks;
+  - idempotent rescans, no accrual without a position, UNRESOLVED then TRUE-UP with exact reference amounts (also after the position closed);
+  - reconciliation exact and deferred (no false HALT), parity with rate changes, legacy rollback;
+  - ETF T-bill states, preflight DEGRADED-only, events without any download, the W005 grace;
+  - the v0.4 hash and threshold pin.
+- **Replay proof on copies:**
+  - Paper books: values byte-identical, trades as before, the copies of `paper/` untouched.
+  - Forward ledger: independent recomputation equals the stored ledger for both rules.
+  - Signal and gate code (`rules.py`, `gate.py`, `scanner.py`) and the v0.2/v0.3 documents: byte-unchanged.
+- **Live:** the 22:02 EST scan on the new code was READY. Financing rates OK: DTB3 VALID (10-29, age 1), JPY VALID (09-01, age 61). Reconciled; empty error log.
+
+### F. Integrity confirmations
+
+- F001 and F002 rules, signals, entries, exits, stops, targets, sizing, risk limits, blackouts, guards and cost values: unchanged.
+- Pre-registration v0.2 and v0.3 hashes: unchanged and pinned. v0.4 frozen (`d85b8fd`, sha256 `41e2e561…`), recorded in config, the research memory and the forward registry, before any financing accrued.
+- Historical N = 142; forward N = 2.
+- Holdout untouched. No historical backtest.
+- No existing record edited.
+- No live trading, order endpoint, account, credential or install.
+- No MontyFinance component imported.
+
+### G. Status
+
+| Item | Status |
+|---|---|
+| FIX VERIFIED (defects reproduced; fix proven by tests and the reference) | **Yes** |
+| FIX IMPLEMENTED | **Yes** |
+| FIX TESTED (398 pass) | **Yes** |
+| ACTIVE IN THE RUNNING SCANNER | **Yes, since 21:48 EST 2026-11-01**; first accrual under it: 2026-11-02 17:00 EST |
+| HISTORICAL CORRECTIONS PENDING | **None** (no financing had accrued) |
+| BROKER FINANCING | **Still estimated** (proxy model; no verified broker charge) |
+
+### H. Decisions for you
+
+1. **The entry-day parity defect:** approve the fix (replay from the entry fill's mid), or accept the false-HALT risk with a manual `resume` if it happens.
+2. **Later proposals:** the BoJ daily call rate as the JPY source (v0.5), and a compliant source for event reactions.
