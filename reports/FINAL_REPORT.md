@@ -1,5 +1,7 @@
 # Can a $100 account reach $1,000 with simple ETF or commodity strategies? Three pre-registered backtest studies
 
+> **Note added 2026-11-02 (superseded, not rewritten):** this report covers Studies 1–3 only (cumulative N = 134, as of 2026-10-22). It was followed by Study 4 (USD/JPY, V135–V142, cumulative N = 142, 0 of 8 validated, `reports/specialists/usdjpy/study1_kill_table.md`) and by Study 5 (frozen 2026-11-02, V143–V145, N = 145, not yet run). For the current view, see the research review (`reports/research_review/`, local) and `reports/PROJECT_OVERVIEW.md`. The text below is unchanged.
+
 _Final report. Data 2004-11-18 to 2023-12-29. The 2024 onward holdout was never opened. Last updated 2026-10-22._
 
 ## Headline (all three studies)
