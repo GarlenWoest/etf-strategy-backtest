@@ -42,3 +42,6 @@ reports/AUDIT_RESPONSE_*
 
 # restore drill reports (private registry figures)
 reports/drills/
+
+# Private risk-register details (employer/school names): never pushed
+research/RISK_REGISTER_PRIVATE.md
